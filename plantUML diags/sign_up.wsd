@@ -1,0 +1,15 @@
+@startuml
+
+actor user
+participant frontend
+participant backend
+
+user -> frontend: зайти на сайт, регистрация \n(открыть браузер)
+frontend --> user: показать форму регистрации
+user -> frontend: заполнить форму (email, пароль, имя и т.п.) \nнажать "Зарегистрироваться"
+frontend -> backend: POST /auth/register {регистрационные_данные}
+backend -> backend: проверить уникальность email; \nсоздать пользователя в БД
+backend --> frontend: 201 Created {userId, userInfo}
+frontend --> user: показать сообщение об успешной регистрации \nпредложить войти в систему
+
+@enduml

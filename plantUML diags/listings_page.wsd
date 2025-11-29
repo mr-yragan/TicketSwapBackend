@@ -1,0 +1,13 @@
+@startuml
+
+actor user
+participant frontend
+participant backend
+
+user -> frontend: зайти на Ticketswap, размещение заявки \n (открыть браузер)
+frontend -> backend: GET /listings?eventsName="вназвание_группы"
+backend -> backend: Вот билеты
+backend --> frontend: response с билетами
+frontend --> user: показать билеты
+
+@enduml
