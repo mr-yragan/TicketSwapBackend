@@ -1,4 +1,5 @@
 @startuml
+title Процесс логина пользователя
 
 actor user
 participant frontend
@@ -10,10 +11,14 @@ frontend --> user: показать форму логина
 user -> frontend: ввести email и пароль \nнажать "Войти"
 frontend -> backend: POST /auth/login {email, password}
 
-backend -> backend: найти пользователя в БД
-backend -> backend: вычислить hash(password) и сравнить\nс hash из БД
-
-backend --> frontend: 200 OK {accessToken / sessionId}
-frontend --> user: показать личный кабинет \n(состояние "авторизован")
+alt Успешная аутентификация
+    backend -> backend: найти пользователя в БД
+    backend -> backend: вычислить hash(password) и сравнить\nс hash из БД
+    backend --> frontend: 200 OK {accessToken / sessionId}
+    frontend --> user: показать личный кабинет \n(состояние "авторизован")
+else Неверный email или пароль
+    backend --> frontend: 401 Unauthorized \n{error="Неверный email или пароль"}
+    frontend --> user: показать сообщение об ошибке \n"Неверный email или пароль"
+end
 
 @enduml
