@@ -1,9 +1,13 @@
+server:
+  port: ${PORT:8080}
+
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/ticketswap
-    username: ticketswap
-    password: ticketswap
-    driver-class-name: org.postgresql.Driver
+    datasource:
+      url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/ticketswap}
+      username: ${SPRING_DATASOURCE_USERNAME:ticketswap}
+      password: ${SPRING_DATASOURCE_PASSWORD:ticketswap}
+      driver-class-name: org.postgresql.Driver
 
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
