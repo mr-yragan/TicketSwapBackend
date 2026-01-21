@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:17
@@ -10,3 +8,16 @@ services:
       POSTGRES_PASSWORD: ticketswap
     ports:
       - "5432:5432"
+
+  backend:
+    build: .
+    container_name: ticketswap-backend
+    depends_on:
+      - postgres
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ticketswap
+      SPRING_DATASOURCE_USERNAME: ticketswap
+      SPRING_DATASOURCE_PASSWORD: ticketswap
+      PORT: 8080
+    ports:
+      - "8080:8080"
