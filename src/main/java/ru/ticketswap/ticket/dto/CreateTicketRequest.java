@@ -13,16 +13,30 @@ public record CreateTicketRequest(
         @NotBlank(message = "uid is required")
         @Size(max = 255, message = "uid must be at most 255 characters")
         String uid,
+
         @NotBlank(message = "eventName is required")
         @Size(max = 255, message = "eventName must be at most 255 characters")
         String eventName,
+
         @NotNull(message = "eventDate is required")
         @Future(message = "eventDate must be in the future")
         LocalDateTime eventDate,
-        @NotNull(message = "originalPrice is required")
-        @DecimalMin(value = "0.01", message = "originalPrice must be positive")
-        BigDecimal originalPrice,
-        @NotNull(message = "resalePrice is required")
-        @DecimalMin(value = "0.01", message = "resalePrice must be positive")
-        BigDecimal resalePrice
-) {}
+
+        @NotBlank(message = "venue is required")
+        @Size(max = 255, message = "venue must be at most 255 characters")
+        String venue,
+
+        @NotNull(message = "price is required")
+        @DecimalMin(value = "0.01", message = "price must be positive")
+        BigDecimal price,
+
+        @Size(max = 2000, message = "additionalInfo must be at most 2000 characters")
+        String additionalInfo,
+
+        @Size(max = 255, message = "organizerName must be at most 255 characters")
+        String organizerName,
+
+        @Size(max = 2000, message = "sellerComment must be at most 2000 characters")
+        String sellerComment
+) {
+}

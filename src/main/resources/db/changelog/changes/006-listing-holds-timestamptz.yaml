@@ -1,0 +1,15 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-listing-holds-timestamptz
+      author: vanya
+      changes:
+        - sql:
+            dbms: postgresql
+            splitStatements: true
+            stripComments: true
+            sql: |
+              ALTER TABLE listing_holds
+                ALTER COLUMN hold_until TYPE TIMESTAMP WITH TIME ZONE
+                  USING hold_until AT TIME ZONE 'UTC',
+                ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE
+                  USING created_at AT TIME ZONE 'UTC';

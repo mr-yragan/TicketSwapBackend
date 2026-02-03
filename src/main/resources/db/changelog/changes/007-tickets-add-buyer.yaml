@@ -1,0 +1,26 @@
+databaseChangeLog:
+  - changeSet:
+      id: 7-tickets-add-buyer
+      author: vanya
+      changes:
+        - addColumn:
+            tableName: tickets
+            columns:
+              - column:
+                  name: buyer_id
+                  type: bigint
+                  constraints:
+                    nullable: true
+        - createIndex:
+            tableName: tickets
+            indexName: idx_tickets_buyer_id
+            columns:
+              - column:
+                  name: buyer_id
+        - addForeignKeyConstraint:
+            baseTableName: tickets
+            baseColumnNames: buyer_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_tickets_buyer
+            onDelete: SET NULL

@@ -2,6 +2,7 @@ package ru.ticketswap.ticket;
 
 import jakarta.persistence.*;
 import ru.ticketswap.user.User;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -23,6 +24,21 @@ public class TicketLot {
     @Column(nullable = false)
     private LocalDateTime eventDate;
 
+    @Column(name = "venue_name", nullable = false)
+    private String venueName;
+
+    @Column(name = "venue_city", nullable = false)
+    private String venueCity;
+
+    @Column(name = "additional_info", length = 2000)
+    private String additionalInfo;
+
+    @Column(name = "organizer_name")
+    private String organizerName;
+
+    @Column(name = "seller_comment", length = 2000)
+    private String sellerComment;
+
     @Column(nullable = false)
     private BigDecimal originalPrice;
 
@@ -37,30 +53,110 @@ public class TicketLot {
     @JoinColumn(name = "seller_id", nullable = false)
     private User seller;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "buyer_id")
+    private User buyer;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    protected TicketLot() {}
+    protected TicketLot() {
+    }
 
-    public TicketLot(String uid, String eventName, LocalDateTime eventDate,
-                     BigDecimal originalPrice, BigDecimal resalePrice, User seller) {
+    public TicketLot(
+            String uid,
+            String eventName,
+            LocalDateTime eventDate,
+            String venueName,
+            String venueCity,
+            BigDecimal price,
+            String additionalInfo,
+            String organizerName,
+            String sellerComment,
+            User seller
+    ) {
         this.uid = uid;
         this.eventName = eventName;
         this.eventDate = eventDate;
-        this.originalPrice = originalPrice;
-        this.resalePrice = resalePrice;
+        this.venueName = venueName;
+        this.venueCity = venueCity;
+        this.additionalInfo = additionalInfo;
+        this.organizerName = organizerName;
+        this.sellerComment = sellerComment;
+
+        this.originalPrice = price;
+        this.resalePrice = price;
+
         this.seller = seller;
         this.status = TicketStatus.CREATED;
         this.createdAt = Instant.now();
     }
 
-    public Long getId() { return id; }
-    public String getUid() { return uid; }
-    public String getEventName() { return eventName; }
-    public LocalDateTime getEventDate() { return eventDate; }
-    public BigDecimal getOriginalPrice() { return originalPrice; }
-    public BigDecimal getResalePrice() { return resalePrice; }
-    public TicketStatus getStatus() { return status; }
-    public User getSeller() { return seller; }
-    public Instant getCreatedAt() { return createdAt; }
+    public Long getId() {
+        return id;
+    }
+
+    public String getUid() {
+        return uid;
+    }
+
+    public String getEventName() {
+        return eventName;
+    }
+
+    public LocalDateTime getEventDate() {
+        return eventDate;
+    }
+
+    public String getVenueName() {
+        return venueName;
+    }
+
+    public String getVenueCity() {
+        return venueCity;
+    }
+
+    public String getAdditionalInfo() {
+        return additionalInfo;
+    }
+
+    public String getOrganizerName() {
+        return organizerName;
+    }
+
+    public String getSellerComment() {
+        return sellerComment;
+    }
+
+    public BigDecimal getOriginalPrice() {
+        return originalPrice;
+    }
+
+    public BigDecimal getResalePrice() {
+        return resalePrice;
+    }
+
+    public TicketStatus getStatus() {
+        return status;
+    }
+
+    public User getSeller() {
+        return seller;
+    }
+
+    public User getBuyer() {
+        return buyer;
+    }
+
+    public void setBuyer(User buyer) {
+        this.buyer = buyer;
+    }
+
+    public void setStatus(TicketStatus status) {
+        this.status = status;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
 }
