@@ -10,14 +10,14 @@ import ru.ticketswap.common.BusinessRuleException;
 import ru.ticketswap.common.NotFoundException;
 import ru.ticketswap.common.UnauthorizedException;
 import ru.ticketswap.ticket.dto.CreateTicketRequest;
+import ru.ticketswap.ticket.dto.ListingDetailsResponse;
 import ru.ticketswap.ticket.dto.TicketLotResponse;
 import ru.ticketswap.user.User;
 import ru.ticketswap.user.UserRepository;
 
-import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
-
-import static java.util.stream.Collectors.toList;
 
 @RestController
 @RequestMapping("/api/tickets")
@@ -31,52 +31,80 @@ public class TicketController {
         this.userRepository = userRepository;
     }
 
+    @GetMapping
+    public ResponseEntity<List<TicketLotResponse>> listTickets() {
+        LocalDateTime now = LocalDateTime.now();
+        List<TicketLotResponse> response = ticketRepository.findAll().stream()
+                .filter(t -> t.getStatus() != TicketStatus.COMPLETED)
+                .filter(t -> t.getEventDate() != null && t.getEventDate().isAfter(now))
+                .sorted(Comparator.comparing(TicketLot::getCreatedAt).reversed())
+                .map(this::toTicketLotResponse)
+                .toList();
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/sell")
-    public ResponseEntity<?> sellTicket(
+    public ResponseEntity<ListingDetailsResponse> sellTicket(
             @Valid @RequestBody CreateTicketRequest request,
             @AuthenticationPrincipal UserDetails userDetails
     ) {
-        BigDecimal maxPrice = request.originalPrice().multiply(new BigDecimal("1.20"));
-        if (request.resalePrice().compareTo(maxPrice) > 0) {
-            throw new BusinessRuleException("Resale price cannot exceed original price by more than 20%");
-        }
-
-
         if (userDetails == null) {
             throw new UnauthorizedException("Unauthorized");
         }
 
         User seller = userRepository.findByEmail(userDetails.getUsername())
-                .orElseThrow(() -> new UnauthorizedException("Unauthorized"));
+                .orElseThrow(() -> new UnauthorizedException("User not found"));
 
+        VenueParts venueParts = parseVenueParts(request.venue());
+
+        User sellerRef = seller;
 
         TicketLot ticket = new TicketLot(
                 request.uid(),
                 request.eventName(),
                 request.eventDate(),
-                request.originalPrice(),
-                request.resalePrice(),
-                seller
+                venueParts.venueName(),
+                venueParts.venueCity(),
+                request.price(),
+                request.additionalInfo(),
+                request.organizerName(),
+                request.sellerComment(),
+                sellerRef
         );
 
-        ticketRepository.save(ticket);
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(ticket));
+        TicketLot saved = ticketRepository.saveAndFlush(ticket);
+        return ResponseEntity.status(HttpStatus.CREATED).body(toDetailsResponse(saved));
     }
 
-    @GetMapping
-    public ResponseEntity<List<TicketLotResponse>> listTickets() {
-        List<TicketLotResponse> items = ticketRepository.findAll().stream()
-                .map(this::toResponse)
-                .collect(toList());
-        return ResponseEntity.ok(items);
-    }
+    @PostMapping("/{id}/buy")
+    public ResponseEntity<ListingDetailsResponse> buyTicket(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        if (userDetails == null) {
+            throw new UnauthorizedException("Unauthorized");
+        }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<TicketLotResponse> getTicket(@PathVariable Long id) {
+        User buyer = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new UnauthorizedException("User not found"));
+
         TicketLot ticket = ticketRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Ticket not found"));
-        return ResponseEntity.ok(toResponse(ticket));
+
+        if (ticket.getStatus() == TicketStatus.COMPLETED) {
+            throw new BusinessRuleException("Ticket is already sold");
+        }
+
+        if (ticket.getSeller() != null && ticket.getSeller().getId() != null && ticket.getSeller().getId().equals(buyer.getId())) {
+            throw new BusinessRuleException("You cannot buy your own ticket");
+        }
+
+        User buyerRef = buyer;
+        ticket.setBuyer(buyerRef);
+        ticket.setStatus(TicketStatus.COMPLETED);
+
+        TicketLot saved = ticketRepository.saveAndFlush(ticket);
+        return ResponseEntity.ok(toDetailsResponse(saved));
     }
 
     @GetMapping("/my")
@@ -85,32 +113,92 @@ public class TicketController {
             throw new UnauthorizedException("Unauthorized");
         }
 
-        User seller = userRepository.findByEmail(userDetails.getUsername())
-                .orElseThrow(() -> new UnauthorizedException("Unauthorized"));
+        User user = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new UnauthorizedException("User not found"));
 
-        List<TicketLotResponse> items = ticketRepository.findAllBySellerId(seller.getId()).stream()
-                .map(this::toResponse)
-                .collect(toList());
-        return ResponseEntity.ok(items);
+        List<TicketLotResponse> response = ticketRepository.findAllBySellerIdOrderByCreatedAtDesc(user.getId()).stream()
+                .map(this::toTicketLotResponse)
+                .toList();
+
+        return ResponseEntity.ok(response);
     }
 
-    private TicketLotResponse toResponse(TicketLot ticket) {
-        String sellerEmail = null;
-        try {
-            sellerEmail = ticket.getSeller() != null ? ticket.getSeller().getEmail() : null;
-        } catch (Exception ignored) {
-            // seller is LAZY; but within controller call it should be available in transaction
-        }
+    private TicketLotResponse toTicketLotResponse(TicketLot ticket) {
         return new TicketLotResponse(
                 ticket.getId(),
-                ticket.getUid(),
                 ticket.getEventName(),
                 ticket.getEventDate(),
-                ticket.getOriginalPrice(),
+                formatVenue(ticket.getVenueName(), ticket.getVenueCity()),
                 ticket.getResalePrice(),
-                ticket.getStatus(),
-                sellerEmail,
-                ticket.getCreatedAt()
+                isVerified(ticket)
         );
+    }
+
+    private ListingDetailsResponse toDetailsResponse(TicketLot ticket) {
+        ListingDetailsResponse.SellerInfo sellerInfo = null;
+        if (ticket.getSeller() != null) {
+            String displayName = ticket.getSeller().getLogin();
+            if (displayName == null || displayName.isBlank()) {
+                displayName = ticket.getSeller().getEmail();
+            }
+            sellerInfo = new ListingDetailsResponse.SellerInfo(displayName, ticket.getSeller().getCreatedAt());
+        }
+
+        return new ListingDetailsResponse(
+                ticket.getId(),
+                ticket.getEventName(),
+                ticket.getEventDate(),
+                formatVenue(ticket.getVenueName(), ticket.getVenueCity()),
+                ticket.getResalePrice(),
+                isVerified(ticket),
+                ticket.getAdditionalInfo(),
+                ticket.getOrganizerName(),
+                ticket.getSellerComment(),
+                sellerInfo
+        );
+    }
+
+    private boolean isVerified(TicketLot ticket) {
+        TicketStatus status = ticket.getStatus();
+        return status != TicketStatus.CREATED && status != TicketStatus.PENDING_VALIDATION;
+    }
+
+    private record VenueParts(String venueName, String venueCity) {
+    }
+
+    private VenueParts parseVenueParts(String venueLine) {
+        if (venueLine == null) {
+            return new VenueParts("", "");
+        }
+
+        String trimmed = venueLine.trim();
+        if (trimmed.isEmpty()) {
+            return new VenueParts("", "");
+        }
+
+        int comma = trimmed.indexOf(',');
+        if (comma < 0) {
+            return new VenueParts(trimmed, "");
+        }
+
+        String name = trimmed.substring(0, comma).trim();
+        String city = trimmed.substring(comma + 1).trim();
+        return new VenueParts(name, city);
+    }
+
+    private String formatVenue(String venueName, String venueCity) {
+        String name = venueName == null ? "" : venueName.trim();
+        String city = venueCity == null ? "" : venueCity.trim();
+
+        if (name.isEmpty() && city.isEmpty()) {
+            return "";
+        }
+        if (city.isEmpty()) {
+            return name;
+        }
+        if (name.isEmpty()) {
+            return city;
+        }
+        return name + ", " + city;
     }
 }

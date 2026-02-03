@@ -96,3 +96,19 @@ databaseChangeLog:
   - include:
       file: changes/003-tickets-constraints.yaml
       relativeToChangelogFile: true
+
+  - include:
+      file: changes/004-user-profile-and-holds.yaml
+      relativeToChangelogFile: true
+
+  - include:
+      file: changes/005-tickets-add-ui-fields.yaml
+      relativeToChangelogFile: true
+
+  - include:
+      file: changes/006-listing-holds-timestamptz.yaml
+      relativeToChangelogFile: true
+
+  - include:
+      file: changes/007-tickets-add-buyer.yaml
+      relativeToChangelogFile: true

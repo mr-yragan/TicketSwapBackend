@@ -1,0 +1,35 @@
+databaseChangeLog:
+  - changeSet:
+      id: 5-tickets-add-ui-fields
+      author: vanya
+      changes:
+        - addColumn:
+            tableName: tickets
+            columns:
+              - column:
+                  name: venue_name
+                  type: varchar(255)
+                  defaultValue: ""
+                  constraints:
+                    nullable: false
+              - column:
+                  name: venue_city
+                  type: varchar(255)
+                  defaultValue: ""
+                  constraints:
+                    nullable: false
+              - column:
+                  name: additional_info
+                  type: varchar(2000)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: organizer_name
+                  type: varchar(255)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: seller_comment
+                  type: varchar(2000)
+                  constraints:
+                    nullable: true
