@@ -1,0 +1,24 @@
+databaseChangeLog:
+  - changeSet:
+      id: 3-tickets-constraints
+      author: vanya
+      changes:
+        - addUniqueConstraint:
+            tableName: tickets
+            columnNames: uid
+            constraintName: uq_tickets_uid
+        - addDefaultValue:
+            tableName: tickets
+            columnName: created_at
+            defaultValueComputed: CURRENT_TIMESTAMP
+        - update:
+            tableName: tickets
+            columns:
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+            where: created_at IS NULL
+        - addNotNullConstraint:
+            tableName: tickets
+            columnName: created_at
+            columnDataType: timestamp

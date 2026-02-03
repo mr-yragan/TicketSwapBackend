@@ -92,3 +92,7 @@ databaseChangeLog:
                   name: created_at
                   type: timestamp
                   defaultValueComputed: CURRENT_TIMESTAMP
+
+  - include:
+      file: changes/003-tickets-constraints.yaml
+      relativeToChangelogFile: true

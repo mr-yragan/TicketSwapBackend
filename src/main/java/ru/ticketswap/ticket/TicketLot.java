@@ -14,7 +14,7 @@ public class TicketLot {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     private String uid;
 
     @Column(nullable = false)
@@ -37,7 +37,7 @@ public class TicketLot {
     @JoinColumn(name = "seller_id", nullable = false)
     private User seller;
 
-    @Column(name = "created_at")
+    @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
     protected TicketLot() {}
@@ -57,8 +57,10 @@ public class TicketLot {
     public Long getId() { return id; }
     public String getUid() { return uid; }
     public String getEventName() { return eventName; }
+    public LocalDateTime getEventDate() { return eventDate; }
     public BigDecimal getOriginalPrice() { return originalPrice; }
     public BigDecimal getResalePrice() { return resalePrice; }
     public TicketStatus getStatus() { return status; }
     public User getSeller() { return seller; }
+    public Instant getCreatedAt() { return createdAt; }
 }
