@@ -49,13 +49,14 @@ public class TicketLot {
     @Column(nullable = false)
     private TicketStatus status;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "seller_id", nullable = false)
     private User seller;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "buyer_id")
     private User buyer;
+
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
