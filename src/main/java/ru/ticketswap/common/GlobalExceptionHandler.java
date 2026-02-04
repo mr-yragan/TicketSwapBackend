@@ -23,6 +23,30 @@ public class GlobalExceptionHandler {
         ApiError error = ApiError.of(401, "Unauthorized", ex.getMessage(), req.getRequestURI());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
     }
+    @ExceptionHandler(NotFoundException.class)
+    public ResponseEntity<ApiError> handleNotFoundDomain(NotFoundException ex, HttpServletRequest req) {
+        ApiError error = ApiError.of(404, "Not Found", ex.getMessage(), req.getRequestURI());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ApiError> handleConflict(ConflictException ex, HttpServletRequest req) {
+        ApiError error = ApiError.of(409, "Conflict", ex.getMessage(), req.getRequestURI());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
+    @ExceptionHandler(BusinessRuleException.class)
+    public ResponseEntity<ApiError> handleBusinessRule(BusinessRuleException ex, HttpServletRequest req) {
+        ApiError error = ApiError.of(400, "Bad Request", ex.getMessage(), req.getRequestURI());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiError> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest req) {
+        ApiError error = ApiError.of(400, "Bad Request", ex.getMessage(), req.getRequestURI());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
 
     @ExceptionHandler(NoHandlerFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(NoHandlerFoundException ex, HttpServletRequest req) {
@@ -52,18 +76,6 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleDataIntegrityViolation(DataIntegrityViolationException ex, HttpServletRequest req) {
         ApiError error = ApiError.of(409, "Conflict", "Data integrity violation", req.getRequestURI());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
-    }
-
-    @ExceptionHandler(BusinessRuleException.class)
-    public ResponseEntity<ApiError> handleBusinessRule(BusinessRuleException ex, HttpServletRequest req) {
-        ApiError error = ApiError.of(400, "Bad Request", ex.getMessage(), req.getRequestURI());
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
-    }
-
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ApiError> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest req) {
-        ApiError error = ApiError.of(400, "Bad Request", ex.getMessage(), req.getRequestURI());
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
     @ExceptionHandler(Exception.class)

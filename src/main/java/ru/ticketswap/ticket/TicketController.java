@@ -6,18 +6,25 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
-import ru.ticketswap.common.BusinessRuleException;
-import ru.ticketswap.common.NotFoundException;
 import ru.ticketswap.common.UnauthorizedException;
+import ru.ticketswap.hold.ListingHold;
+import ru.ticketswap.hold.ListingHoldRepository;
+import ru.ticketswap.hold.dto.ListingHoldResponse;
+import ru.ticketswap.purchase.PurchaseService;
 import ru.ticketswap.ticket.dto.CreateTicketRequest;
 import ru.ticketswap.ticket.dto.ListingDetailsResponse;
+import ru.ticketswap.ticket.dto.ListingViewResponse;
 import ru.ticketswap.ticket.dto.TicketLotResponse;
 import ru.ticketswap.user.User;
 import ru.ticketswap.user.UserRepository;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/tickets")
@@ -25,21 +32,56 @@ public class TicketController {
 
     private final TicketRepository ticketRepository;
     private final UserRepository userRepository;
+    private final ListingHoldRepository listingHoldRepository;
+    private final PurchaseService purchaseService;
+    private final ListingLifecycleService listingLifecycleService;
 
-    public TicketController(TicketRepository ticketRepository, UserRepository userRepository) {
+    public TicketController(
+            TicketRepository ticketRepository,
+            UserRepository userRepository,
+            ListingHoldRepository listingHoldRepository,
+            PurchaseService purchaseService,
+            ListingLifecycleService listingLifecycleService
+    ) {
         this.ticketRepository = ticketRepository;
         this.userRepository = userRepository;
+        this.listingHoldRepository = listingHoldRepository;
+        this.purchaseService = purchaseService;
+        this.listingLifecycleService = listingLifecycleService;
     }
 
     @GetMapping
     public ResponseEntity<List<TicketLotResponse>> listTickets() {
         LocalDateTime now = LocalDateTime.now();
+        Set<Long> heldIds = new HashSet<>(listingHoldRepository.findActiveListingIds(Instant.now()));
+
         List<TicketLotResponse> response = ticketRepository.findAll().stream()
-                .filter(t -> t.getStatus() != TicketStatus.COMPLETED)
+                .filter(t -> t.getStatus() == TicketStatus.PENDING_RECIPIENT)
                 .filter(t -> t.getEventDate() != null && t.getEventDate().isAfter(now))
+                .filter(t -> !heldIds.contains(t.getId()))
                 .sorted(Comparator.comparing(TicketLot::getCreatedAt).reversed())
                 .map(this::toTicketLotResponse)
                 .toList();
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<ListingViewResponse> getListing(@PathVariable("id") Long id) {
+        TicketLot ticket = ticketRepository.findById(id)
+                .orElseThrow(() -> new ru.ticketswap.common.NotFoundException("Ticket not found"));
+
+        Optional<ListingHold> activeHold = listingHoldRepository.findByListingIdAndHoldUntilAfter(id, Instant.now());
+        ListingViewResponse.Hold hold = activeHold
+                .map(h -> new ListingViewResponse.Hold(h.getId(), h.getHoldUntil()))
+                .orElse(null);
+
+        ListingViewResponse response = new ListingViewResponse(
+                toDetailsResponse(ticket),
+                ticket.getStatus(),
+                hold
+        );
+
         return ResponseEntity.ok(response);
     }
 
@@ -48,16 +90,9 @@ public class TicketController {
             @Valid @RequestBody CreateTicketRequest request,
             @AuthenticationPrincipal UserDetails userDetails
     ) {
-        if (userDetails == null) {
-            throw new UnauthorizedException("Unauthorized");
-        }
-
-        User seller = userRepository.findByEmail(userDetails.getUsername())
-                .orElseThrow(() -> new UnauthorizedException("User not found"));
+        User seller = requireUser(userDetails);
 
         VenueParts venueParts = parseVenueParts(request.venue());
-
-        User sellerRef = seller;
 
         TicketLot ticket = new TicketLot(
                 request.uid(),
@@ -69,11 +104,46 @@ public class TicketController {
                 request.additionalInfo(),
                 request.organizerName(),
                 request.sellerComment(),
-                sellerRef
+                seller
         );
 
         TicketLot saved = ticketRepository.saveAndFlush(ticket);
+
+        listingLifecycleService.onListingCreated(saved.getId());
+
         return ResponseEntity.status(HttpStatus.CREATED).body(toDetailsResponse(saved));
+    }
+
+    @PostMapping("/{id}/hold")
+    public ResponseEntity<ListingHoldResponse> holdListing(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        User buyer = requireUser(userDetails);
+
+        ListingHold hold = purchaseService.createHold(id, buyer);
+
+        TicketLot listing = ticketRepository.findById(id)
+                .orElseThrow(() -> new ru.ticketswap.common.NotFoundException("Ticket not found"));
+
+        ListingHoldResponse response = new ListingHoldResponse(
+                hold.getId(),
+                TicketLotResponse.fromEntity(listing),
+                hold.getHoldUntil(),
+                hold.getCreatedAt()
+        );
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @DeleteMapping("/{id}/hold")
+    public ResponseEntity<Void> cancelHold(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        User buyer = requireUser(userDetails);
+        purchaseService.cancelHold(id, buyer);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/buy")
@@ -81,46 +151,28 @@ public class TicketController {
             @PathVariable("id") Long id,
             @AuthenticationPrincipal UserDetails userDetails
     ) {
-        if (userDetails == null) {
-            throw new UnauthorizedException("Unauthorized");
-        }
-
-        User buyer = userRepository.findByEmail(userDetails.getUsername())
-                .orElseThrow(() -> new UnauthorizedException("User not found"));
-
-        TicketLot ticket = ticketRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Ticket not found"));
-
-        if (ticket.getStatus() == TicketStatus.COMPLETED) {
-            throw new BusinessRuleException("Ticket is already sold");
-        }
-
-        if (ticket.getSeller() != null && ticket.getSeller().getId() != null && ticket.getSeller().getId().equals(buyer.getId())) {
-            throw new BusinessRuleException("You cannot buy your own ticket");
-        }
-
-        User buyerRef = buyer;
-        ticket.setBuyer(buyerRef);
-        ticket.setStatus(TicketStatus.COMPLETED);
-
-        TicketLot saved = ticketRepository.saveAndFlush(ticket);
+        User buyer = requireUser(userDetails);
+        TicketLot saved = purchaseService.buyNow(id, buyer);
         return ResponseEntity.ok(toDetailsResponse(saved));
     }
 
     @GetMapping("/my")
     public ResponseEntity<List<TicketLotResponse>> myTickets(@AuthenticationPrincipal UserDetails userDetails) {
-        if (userDetails == null) {
-            throw new UnauthorizedException("Unauthorized");
-        }
-
-        User user = userRepository.findByEmail(userDetails.getUsername())
-                .orElseThrow(() -> new UnauthorizedException("User not found"));
+        User user = requireUser(userDetails);
 
         List<TicketLotResponse> response = ticketRepository.findAllBySellerIdOrderByCreatedAtDesc(user.getId()).stream()
                 .map(this::toTicketLotResponse)
                 .toList();
 
         return ResponseEntity.ok(response);
+    }
+
+    private User requireUser(UserDetails principal) {
+        if (principal == null || principal.getUsername() == null) {
+            throw new UnauthorizedException("Unauthorized");
+        }
+        return userRepository.findByEmail(principal.getUsername())
+                .orElseThrow(() -> new UnauthorizedException("Unauthorized"));
     }
 
     private TicketLotResponse toTicketLotResponse(TicketLot ticket) {
@@ -160,7 +212,12 @@ public class TicketController {
 
     private boolean isVerified(TicketLot ticket) {
         TicketStatus status = ticket.getStatus();
-        return status != TicketStatus.CREATED && status != TicketStatus.PENDING_VALIDATION;
+        if (status == null) {
+            return false;
+        }
+        return status == TicketStatus.PENDING_RECIPIENT
+                || status == TicketStatus.PROCESSING
+                || status == TicketStatus.COMPLETED;
     }
 
     private record VenueParts(String venueName, String venueCity) {

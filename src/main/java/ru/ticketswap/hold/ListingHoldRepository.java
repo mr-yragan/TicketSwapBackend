@@ -16,6 +16,15 @@ public interface ListingHoldRepository extends JpaRepository<ListingHold, Long> 
 
     Optional<ListingHold> findByListingId(Long listingId);
 
+    Optional<ListingHold> findByListingIdAndHoldUntilAfter(Long listingId, Instant now);
+
+    List<ListingHold> findAllByHoldUntilAfter(Instant now);
+
+    void deleteByListingId(Long listingId);
+
+    @Query("select h.listing.id from ListingHold h where h.holdUntil > :now")
+    List<Long> findActiveListingIds(@Param("now") Instant now);
+
     @Query("""
         select h
         from ListingHold h

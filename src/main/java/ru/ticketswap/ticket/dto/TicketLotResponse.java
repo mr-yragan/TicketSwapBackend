@@ -44,6 +44,8 @@ public record TicketLotResponse(
         if (status == null) {
             return false;
         }
-        return status != TicketStatus.CREATED && status != TicketStatus.PENDING_VALIDATION;
+        return status == TicketStatus.PENDING_RECIPIENT
+                || status == TicketStatus.PROCESSING
+                || status == TicketStatus.COMPLETED;
     }
 }
