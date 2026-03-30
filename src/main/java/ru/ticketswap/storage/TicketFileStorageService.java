@@ -10,12 +10,16 @@ import org.springframework.web.multipart.MultipartFile;
 import ru.ticketswap.common.BusinessRuleException;
 import ru.ticketswap.common.NotFoundException;
 import ru.ticketswap.config.TicketSwapProperties;
+import ru.ticketswap.ticket.TicketFile;
+import ru.ticketswap.ticket.TicketFileRepository;
 import ru.ticketswap.ticket.TicketLot;
-import ru.ticketswap.ticket.TicketRepository;
 import ru.ticketswap.ticket.dto.TicketFileDownloadUrlResponse;
+import ru.ticketswap.ticket.dto.TicketFileResponse;
+import ru.ticketswap.ticket.dto.TicketFilesResponse;
 
 import java.io.InputStream;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -34,25 +38,133 @@ public class TicketFileStorageService {
     private static final List<String> ALLOWED_EXTENSIONS = List.of(".pdf", ".png", ".jpg", ".jpeg");
 
     private final MinioClient minioClient;
-    private final TicketRepository ticketRepository;
+    private final TicketFileRepository ticketFileRepository;
     private final TicketSwapProperties.Storage.S3 properties;
 
     public TicketFileStorageService(
             MinioClient minioClient,
-            TicketRepository ticketRepository,
+            TicketFileRepository ticketFileRepository,
             TicketSwapProperties ticketSwapProperties
     ) {
         this.minioClient = minioClient;
-        this.ticketRepository = ticketRepository;
+        this.ticketFileRepository = ticketFileRepository;
         this.properties = ticketSwapProperties.getStorage().getS3();
     }
 
-    public TicketLot uploadTicketFile(TicketLot ticket, MultipartFile file) {
-        validate(file);
+    public TicketFilesResponse uploadTicketFiles(TicketLot ticket, List<MultipartFile> files) {
+        List<MultipartFile> normalizedFiles = normalizeFiles(files);
+        if (normalizedFiles.isEmpty()) {
+            throw new BusinessRuleException("At least one ticket file is required");
+        }
 
-        String objectKey = buildObjectKey(ticket.getId(), file.getOriginalFilename());
-        String previousObjectKey = ticket.getTicketFileObjectKey();
+        List<TicketFile> uploadedEntities = new ArrayList<>();
+        List<String> uploadedObjectKeys = new ArrayList<>();
 
+        try {
+            for (MultipartFile file : normalizedFiles) {
+                validate(file);
+                String objectKey = buildObjectKey(ticket.getId(), file.getOriginalFilename());
+                uploadObject(objectKey, file);
+                uploadedObjectKeys.add(objectKey);
+
+                TicketFile ticketFile = new TicketFile(
+                        ticket,
+                        objectKey,
+                        safeOriginalName(file),
+                        resolveContentType(file),
+                        file.getSize()
+                );
+                uploadedEntities.add(ticketFile);
+            }
+
+            ticketFileRepository.saveAll(uploadedEntities);
+            ticketFileRepository.flush();
+            return listFiles(ticket);
+        } catch (RuntimeException ex) {
+            uploadedObjectKeys.forEach(this::deleteObjectQuietly);
+            throw ex;
+        }
+    }
+
+    public TicketFilesResponse listFiles(TicketLot ticket) {
+        List<TicketFileResponse> files = ticketFileRepository.findAllByTicketIdOrderByCreatedAtAscIdAsc(ticket.getId()).stream()
+                .map(TicketFileResponse::fromEntity)
+                .toList();
+        return new TicketFilesResponse(ticket.getId(), files.size(), files);
+    }
+
+    public TicketFileDownloadUrlResponse createDownloadUrl(TicketLot ticket, Long fileId) {
+        TicketFile ticketFile = loadTicketFile(ticket, fileId);
+        return createDownloadUrl(ticketFile);
+    }
+
+    public TicketFileDownloadUrlResponse createSingleDownloadUrl(TicketLot ticket) {
+        List<TicketFile> files = ticketFileRepository.findAllByTicketIdOrderByCreatedAtAscIdAsc(ticket.getId());
+        if (files.isEmpty()) {
+            throw new NotFoundException("Ticket file not found");
+        }
+        if (files.size() > 1) {
+            throw new BusinessRuleException("Multiple ticket files are attached; use /api/tickets/{id}/files/{fileId}/download-url");
+        }
+        return createDownloadUrl(files.get(0));
+    }
+
+    public void deleteTicketFile(TicketLot ticket, Long fileId) {
+        TicketFile ticketFile = loadTicketFile(ticket, fileId);
+        deleteObjectQuietly(ticketFile.getObjectKey());
+        ticketFileRepository.delete(ticketFile);
+        ticketFileRepository.flush();
+    }
+
+    public void deleteAllTicketFiles(TicketLot ticket) {
+        List<TicketFile> files = ticketFileRepository.findAllByTicketIdOrderByCreatedAtAscIdAsc(ticket.getId());
+        for (TicketFile file : files) {
+            deleteObjectQuietly(file.getObjectKey());
+        }
+        if (!files.isEmpty()) {
+            ticketFileRepository.deleteAll(files);
+            ticketFileRepository.flush();
+        }
+    }
+
+    public void deleteFilesQuietly(TicketLot ticket) {
+        if (ticket == null || ticket.getId() == null) {
+            return;
+        }
+        deleteAllTicketFiles(ticket);
+    }
+
+    private TicketFile loadTicketFile(TicketLot ticket, Long fileId) {
+        return ticketFileRepository.findByIdAndTicketId(fileId, ticket.getId())
+                .orElseThrow(() -> new NotFoundException("Ticket file not found"));
+    }
+
+    private TicketFileDownloadUrlResponse createDownloadUrl(TicketFile ticketFile) {
+        try {
+            String url = minioClient.getPresignedObjectUrl(
+                    GetPresignedObjectUrlArgs.builder()
+                            .method(Method.GET)
+                            .bucket(properties.getBucket())
+                            .object(ticketFile.getObjectKey())
+                            .expiry(properties.getPresignedGetExpiryMinutes(), TimeUnit.MINUTES)
+                            .build()
+            );
+
+            Instant expiresAt = Instant.now().plusSeconds(properties.getPresignedGetExpiryMinutes() * 60L);
+            return new TicketFileDownloadUrlResponse(
+                    ticketFile.getId(),
+                    url,
+                    expiresAt,
+                    ticketFile.getOriginalName(),
+                    ticketFile.getContentType(),
+                    ticketFile.getSizeBytes()
+            );
+        } catch (Exception ex) {
+            throw new TicketFileStorageException("Failed to create ticket file download URL", ex);
+        }
+    }
+
+    private void uploadObject(String objectKey, MultipartFile file) {
         try (InputStream inputStream = file.getInputStream()) {
             minioClient.putObject(
                     PutObjectArgs.builder()
@@ -65,75 +177,15 @@ public class TicketFileStorageService {
         } catch (Exception ex) {
             throw new TicketFileStorageException("Failed to upload ticket file", ex);
         }
-
-        try {
-            ticket.updateTicketFile(
-                    objectKey,
-                    file.getOriginalFilename(),
-                    resolveContentType(file),
-                    file.getSize()
-            );
-            TicketLot saved = ticketRepository.saveAndFlush(ticket);
-            if (previousObjectKey != null && !previousObjectKey.isBlank() && !previousObjectKey.equals(objectKey)) {
-                deleteObjectQuietly(previousObjectKey);
-            }
-            return saved;
-        } catch (RuntimeException ex) {
-            deleteObjectQuietly(objectKey);
-            throw ex;
-        }
     }
 
-    public TicketFileDownloadUrlResponse createDownloadUrl(TicketLot ticket) {
-        if (!ticket.hasTicketFile()) {
-            throw new NotFoundException("Ticket file not found");
+    private List<MultipartFile> normalizeFiles(List<MultipartFile> files) {
+        if (files == null) {
+            return List.of();
         }
-
-        try {
-            String url = minioClient.getPresignedObjectUrl(
-                    GetPresignedObjectUrlArgs.builder()
-                            .method(Method.GET)
-                            .bucket(properties.getBucket())
-                            .object(ticket.getTicketFileObjectKey())
-                            .expiry(
-                                    properties.getPresignedGetExpiryMinutes(),
-                                    TimeUnit.MINUTES
-                            )
-                            .build()
-            );
-
-            Instant expiresAt = Instant.now().plusSeconds(properties.getPresignedGetExpiryMinutes() * 60L);
-            return new TicketFileDownloadUrlResponse(
-                    url,
-                    expiresAt,
-                    ticket.getTicketFileOriginalName(),
-                    ticket.getTicketFileContentType(),
-                    ticket.getTicketFileSizeBytes()
-            );
-        } catch (Exception ex) {
-            throw new TicketFileStorageException("Failed to create ticket file download URL", ex);
-        }
-    }
-
-    public void deleteTicketFile(TicketLot ticket) {
-        String objectKey = ticket.getTicketFileObjectKey();
-        if (objectKey == null || objectKey.isBlank()) {
-            return;
-        }
-        deleteObjectQuietly(objectKey);
-        ticket.clearTicketFile();
-        ticketRepository.saveAndFlush(ticket);
-    }
-
-    public void deleteFileQuietly(TicketLot ticket) {
-        if (ticket == null) {
-            return;
-        }
-        String objectKey = ticket.getTicketFileObjectKey();
-        if (objectKey == null || objectKey.isBlank()) {
-            return;
-        }
-        deleteObjectQuietly(objectKey);
+        return files.stream()
+                .filter(file -> file != null && !file.isEmpty())
+                .toList();
     }
 
     private void validate(MultipartFile file) {
@@ -155,6 +207,14 @@ public class TicketFileStorageService {
     private String buildObjectKey(Long ticketId, String originalFilename) {
         String extension = extractExtension(originalFilename);
         return "tickets/%d/%s%s".formatted(ticketId, UUID.randomUUID(), extension);
+    }
+
+    private String safeOriginalName(MultipartFile file) {
+        String originalName = file.getOriginalFilename();
+        if (originalName == null || originalName.isBlank()) {
+            return "ticket" + extractExtension(originalName);
+        }
+        return originalName;
     }
 
     private String extractExtension(String originalFilename) {

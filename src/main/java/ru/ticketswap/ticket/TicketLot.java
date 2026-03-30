@@ -6,6 +6,9 @@ import ru.ticketswap.user.User;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 @Entity
 @Table(name = "tickets")
@@ -39,18 +42,6 @@ public class TicketLot {
     @Column(name = "seller_comment", length = 2000)
     private String sellerComment;
 
-    @Column(name = "ticket_file_object_key")
-    private String ticketFileObjectKey;
-
-    @Column(name = "ticket_file_original_name")
-    private String ticketFileOriginalName;
-
-    @Column(name = "ticket_file_content_type", length = 100)
-    private String ticketFileContentType;
-
-    @Column(name = "ticket_file_size_bytes")
-    private Long ticketFileSizeBytes;
-
     @Column(nullable = false)
     private BigDecimal originalPrice;
 
@@ -69,6 +60,9 @@ public class TicketLot {
     @JoinColumn(name = "buyer_id")
     private User buyer;
 
+    @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @OrderBy("createdAt ASC, id ASC")
+    private List<TicketFile> ticketFiles = new ArrayList<>();
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -139,40 +133,6 @@ public class TicketLot {
         return sellerComment;
     }
 
-    public String getTicketFileObjectKey() {
-        return ticketFileObjectKey;
-    }
-
-    public String getTicketFileOriginalName() {
-        return ticketFileOriginalName;
-    }
-
-    public String getTicketFileContentType() {
-        return ticketFileContentType;
-    }
-
-    public Long getTicketFileSizeBytes() {
-        return ticketFileSizeBytes;
-    }
-
-    public boolean hasTicketFile() {
-        return ticketFileObjectKey != null && !ticketFileObjectKey.isBlank();
-    }
-
-    public void updateTicketFile(String objectKey, String originalName, String contentType, long sizeBytes) {
-        this.ticketFileObjectKey = objectKey;
-        this.ticketFileOriginalName = originalName;
-        this.ticketFileContentType = contentType;
-        this.ticketFileSizeBytes = sizeBytes;
-    }
-
-    public void clearTicketFile() {
-        this.ticketFileObjectKey = null;
-        this.ticketFileOriginalName = null;
-        this.ticketFileContentType = null;
-        this.ticketFileSizeBytes = null;
-    }
-
     public BigDecimal getOriginalPrice() {
         return originalPrice;
     }
@@ -199,6 +159,37 @@ public class TicketLot {
 
     public void setStatus(TicketStatus status) {
         this.status = status;
+    }
+
+    public List<TicketFile> getTicketFiles() {
+        return Collections.unmodifiableList(ticketFiles);
+    }
+
+    public boolean hasTicketFile() {
+        return !ticketFiles.isEmpty();
+    }
+
+    public int getTicketFilesCount() {
+        return ticketFiles.size();
+    }
+
+    public TicketFile getOnlyTicketFileOrNull() {
+        if (ticketFiles.size() != 1) {
+            return null;
+        }
+        return ticketFiles.get(0);
+    }
+
+    public void addTicketFile(TicketFile ticketFile) {
+        this.ticketFiles.add(ticketFile);
+    }
+
+    public void removeTicketFile(TicketFile ticketFile) {
+        this.ticketFiles.remove(ticketFile);
+    }
+
+    public void clearTicketFiles() {
+        this.ticketFiles.clear();
     }
 
     public Instant getCreatedAt() {

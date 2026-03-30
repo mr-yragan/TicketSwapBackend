@@ -15,7 +15,8 @@ public record ListingDetailsResponse(
         String organizerName,
         String sellerComment,
         SellerInfo seller,
-        boolean hasTicketFile
+        boolean hasTicketFile,
+        int ticketFilesCount
 ) {
 
     public record SellerInfo(

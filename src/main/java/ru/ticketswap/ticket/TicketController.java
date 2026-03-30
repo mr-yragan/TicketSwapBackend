@@ -20,12 +20,14 @@ import ru.ticketswap.ticket.dto.CreateTicketRequest;
 import ru.ticketswap.ticket.dto.ListingDetailsResponse;
 import ru.ticketswap.ticket.dto.ListingViewResponse;
 import ru.ticketswap.ticket.dto.TicketFileDownloadUrlResponse;
+import ru.ticketswap.ticket.dto.TicketFilesResponse;
 import ru.ticketswap.ticket.dto.TicketLotResponse;
 import ru.ticketswap.user.User;
 import ru.ticketswap.user.UserRepository;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -105,26 +107,32 @@ public class TicketController {
     }
 
     @PostMapping(value = "/sell", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ListingDetailsResponse> sellTicketWithFile(
+    public ResponseEntity<ListingDetailsResponse> sellTicketWithFiles(
             @Valid @RequestPart("ticket") CreateTicketRequest request,
-            @RequestPart("ticketFile") MultipartFile ticketFile,
+            @RequestPart(value = "ticketFiles", required = false) List<MultipartFile> ticketFiles,
+            @RequestPart(value = "ticketFile", required = false) MultipartFile singleTicketFile,
             @AuthenticationPrincipal UserDetails userDetails
     ) {
         User seller = requireUser(userDetails);
         TicketLot saved = createListing(request, seller);
+        List<MultipartFile> files = collectFiles(ticketFiles, singleTicketFile);
 
         try {
-            saved = ticketFileStorageService.uploadTicketFile(saved, ticketFile);
+            if (!files.isEmpty()) {
+                ticketFileStorageService.uploadTicketFiles(saved, files);
+                saved = loadTicket(saved.getId());
+            }
             listingLifecycleService.onListingCreated(saved.getId());
             return ResponseEntity.status(HttpStatus.CREATED).body(toDetailsResponse(saved));
         } catch (RuntimeException ex) {
+            ticketFileStorageService.deleteFilesQuietly(saved);
             ticketRepository.deleteById(saved.getId());
             throw ex;
         }
     }
 
     @PostMapping(value = "/{id}/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ListingDetailsResponse> uploadTicketFile(
+    public ResponseEntity<ListingDetailsResponse> uploadSingleTicketFile(
             @PathVariable("id") Long id,
             @RequestPart("ticketFile") MultipartFile ticketFile,
             @AuthenticationPrincipal UserDetails userDetails
@@ -132,30 +140,92 @@ public class TicketController {
         User seller = requireUser(userDetails);
         TicketLot ticket = loadTicket(id);
         ensureSellerCanModifyFile(ticket, seller);
-        TicketLot saved = ticketFileStorageService.uploadTicketFile(ticket, ticketFile);
-        return ResponseEntity.ok(toDetailsResponse(saved));
+        ticketFileStorageService.uploadTicketFiles(ticket, List.of(ticketFile));
+        return ResponseEntity.ok(toDetailsResponse(loadTicket(id)));
     }
 
-    @GetMapping("/{id}/file/download-url")
-    public ResponseEntity<TicketFileDownloadUrlResponse> getTicketFileDownloadUrl(
+    @PostMapping(value = "/{id}/files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<TicketFilesResponse> uploadTicketFiles(
+            @PathVariable("id") Long id,
+            @RequestPart(value = "ticketFiles", required = false) List<MultipartFile> ticketFiles,
+            @RequestPart(value = "ticketFile", required = false) MultipartFile singleTicketFile,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        User seller = requireUser(userDetails);
+        TicketLot ticket = loadTicket(id);
+        ensureSellerCanModifyFile(ticket, seller);
+        TicketFilesResponse response = ticketFileStorageService.uploadTicketFiles(ticket, collectFiles(ticketFiles, singleTicketFile));
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/files")
+    public ResponseEntity<TicketFilesResponse> listTicketFiles(
             @PathVariable("id") Long id,
             @AuthenticationPrincipal UserDetails userDetails
     ) {
         User currentUser = requireUser(userDetails);
         TicketLot ticket = loadTicket(id);
-        ensureCanReadTicketFile(ticket, currentUser);
-        return ResponseEntity.ok(ticketFileStorageService.createDownloadUrl(ticket));
+        ensureCanReadTicketFiles(ticket, currentUser);
+        return ResponseEntity.ok(ticketFileStorageService.listFiles(ticket));
+    }
+
+    @GetMapping("/{id}/file/download-url")
+    public ResponseEntity<TicketFileDownloadUrlResponse> getSingleTicketFileDownloadUrl(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        User currentUser = requireUser(userDetails);
+        TicketLot ticket = loadTicket(id);
+        ensureCanReadTicketFiles(ticket, currentUser);
+        return ResponseEntity.ok(ticketFileStorageService.createSingleDownloadUrl(ticket));
+    }
+
+    @GetMapping("/{id}/files/{fileId}/download-url")
+    public ResponseEntity<TicketFileDownloadUrlResponse> getTicketFileDownloadUrl(
+            @PathVariable("id") Long id,
+            @PathVariable("fileId") Long fileId,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        User currentUser = requireUser(userDetails);
+        TicketLot ticket = loadTicket(id);
+        ensureCanReadTicketFiles(ticket, currentUser);
+        return ResponseEntity.ok(ticketFileStorageService.createDownloadUrl(ticket, fileId));
     }
 
     @DeleteMapping("/{id}/file")
-    public ResponseEntity<Void> deleteTicketFile(
+    public ResponseEntity<Void> deleteAllTicketFilesCompatibility(
             @PathVariable("id") Long id,
             @AuthenticationPrincipal UserDetails userDetails
     ) {
         User seller = requireUser(userDetails);
         TicketLot ticket = loadTicket(id);
         ensureSellerCanModifyFile(ticket, seller);
-        ticketFileStorageService.deleteTicketFile(ticket);
+        ticketFileStorageService.deleteAllTicketFiles(ticket);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{id}/files")
+    public ResponseEntity<Void> deleteAllTicketFiles(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        User seller = requireUser(userDetails);
+        TicketLot ticket = loadTicket(id);
+        ensureSellerCanModifyFile(ticket, seller);
+        ticketFileStorageService.deleteAllTicketFiles(ticket);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{id}/files/{fileId}")
+    public ResponseEntity<Void> deleteTicketFile(
+            @PathVariable("id") Long id,
+            @PathVariable("fileId") Long fileId,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        User seller = requireUser(userDetails);
+        TicketLot ticket = loadTicket(id);
+        ensureSellerCanModifyFile(ticket, seller);
+        ticketFileStorageService.deleteTicketFile(ticket, fileId);
         return ResponseEntity.noContent().build();
     }
 
@@ -243,14 +313,14 @@ public class TicketController {
 
     private void ensureSellerCanModifyFile(TicketLot ticket, User seller) {
         if (ticket.getSeller() == null || ticket.getSeller().getId() == null || !ticket.getSeller().getId().equals(seller.getId())) {
-            throw new UnauthorizedException("You can modify only your own ticket file");
+            throw new UnauthorizedException("You can modify only your own ticket files");
         }
         if (ticket.getStatus() == TicketStatus.PROCESSING || ticket.getStatus() == TicketStatus.COMPLETED) {
-            throw new BusinessRuleException("Ticket file cannot be changed after purchase has started");
+            throw new BusinessRuleException("Ticket files cannot be changed after purchase has started");
         }
     }
 
-    private void ensureCanReadTicketFile(TicketLot ticket, User currentUser) {
+    private void ensureCanReadTicketFiles(TicketLot ticket, User currentUser) {
         boolean isSeller = ticket.getSeller() != null
                 && ticket.getSeller().getId() != null
                 && ticket.getSeller().getId().equals(currentUser.getId());
@@ -261,7 +331,7 @@ public class TicketController {
                 && ticket.getBuyer().getId().equals(currentUser.getId());
 
         if (!isSeller && !isCompletedBuyer) {
-            throw new UnauthorizedException("You do not have access to this ticket file");
+            throw new UnauthorizedException("You do not have access to these ticket files");
         }
     }
 
@@ -297,8 +367,24 @@ public class TicketController {
                 ticket.getOrganizerName(),
                 ticket.getSellerComment(),
                 sellerInfo,
-                ticket.hasTicketFile()
+                ticket.hasTicketFile(),
+                ticket.getTicketFilesCount()
         );
+    }
+
+    private List<MultipartFile> collectFiles(List<MultipartFile> ticketFiles, MultipartFile singleTicketFile) {
+        List<MultipartFile> files = new ArrayList<>();
+        if (ticketFiles != null) {
+            for (MultipartFile file : ticketFiles) {
+                if (file != null && !file.isEmpty()) {
+                    files.add(file);
+                }
+            }
+        }
+        if (singleTicketFile != null && !singleTicketFile.isEmpty()) {
+            files.add(singleTicketFile);
+        }
+        return files;
     }
 
     private boolean isVerified(TicketLot ticket) {

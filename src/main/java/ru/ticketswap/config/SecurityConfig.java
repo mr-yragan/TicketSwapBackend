@@ -51,7 +51,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/tickets/my").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/tickets/*/file", "/api/tickets/*/file/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/tickets/*/file", "/api/tickets/*/file/**", "/api/tickets/*/files", "/api/tickets/*/files/**").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/tickets/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/tickets/**").permitAll()
                         .requestMatchers("/error").permitAll()

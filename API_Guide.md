@@ -1,6 +1,6 @@
 # TicketSwap Frontend API Guide
 
-Полный гайд для frontend по текущему backend TicketSwap с поддержкой S3/MinIO для файлов билетов.
+Полный гайд для frontend по текущему backend TicketSwap с поддержкой S3/MinIO и множественных файлов билетов.
 
 ## 1. Базовая информация
 
@@ -211,7 +211,19 @@ interface TicketFileDownloadUrlResponse {
 }
 ```
 
-### 4.9 MeProfileResponse
+### 4.9 TicketFileResponse
+
+```ts
+interface TicketFileResponse {
+  id: number;
+  originalName: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+```
+
+### 4.10 MeProfileResponse
 
 ```ts
 interface MeProfileResponse {
@@ -224,7 +236,7 @@ interface MeProfileResponse {
 }
 ```
 
-### 4.10 UpdateMeRequest
+### 4.11 UpdateMeRequest
 
 ```ts
 interface UpdateMeRequest {
@@ -293,6 +305,8 @@ backend сам разложит это на:
 ```
 
 ## 5.4 Файлы билетов
+
+На один билет теперь можно загрузить **несколько файлов**.
 
 Разрешены только:
 
@@ -455,6 +469,8 @@ function validateTicketFile(file: File): string | null {
 
 Если активен hold, поле `hold` будет заполнено.
 
+`details.hasTicketFile` означает, что у лота есть **хотя бы один** файл. Для получения списка файлов нужно использовать отдельный endpoint `GET /api/tickets/{id}/files`.
+
 **Ошибки:**
 - `404 Not Found` - лот не найден
 
@@ -538,18 +554,18 @@ Authorization: Bearer <token>
 
 ### POST `/api/tickets/sell` (`multipart/form-data`)
 
-Создание объявления **с файлом билета сразу**.
+Создание объявления **с файлами билета сразу**.
 
 **Auth:** нужен
 
 **Parts:**
 - `ticket` - JSON
-- `ticketFile` - файл
+- `ticketFiles` - один или несколько файлов
 
 **Пример через `fetch`:**
 
 ```ts
-async function createTicketWithFile(token: string, ticketData: CreateTicketRequest, file: File) {
+async function createTicketWithFiles(token: string, ticketData: CreateTicketRequest, files: File[]) {
   const formData = new FormData();
 
   formData.append(
@@ -557,7 +573,9 @@ async function createTicketWithFile(token: string, ticketData: CreateTicketReque
     new Blob([JSON.stringify(ticketData)], { type: "application/json" })
   );
 
-  formData.append("ticketFile", file);
+  for (const file of files) {
+    formData.append("ticketFiles", file);
+  }
 
   const response = await fetch("http://localhost:8080/api/tickets/sell", {
     method: "POST",
@@ -579,40 +597,54 @@ async function createTicketWithFile(token: string, ticketData: CreateTicketReque
 `ListingDetailsResponse`
 
 **Важно:**
-- если файл передан корректно, `hasTicketFile` будет `true`
-- создание лота и файл обрабатываются одной операцией с откатом, если загрузка файла не удалась
+- если передан хотя бы один корректный файл, `hasTicketFile` будет `true`
+- создание лота и файлы обрабатываются одной операцией с откатом, если загрузка файлов не удалась
 
 ---
 
-### POST `/api/tickets/{id}/file`
+### GET `/api/tickets/{id}/files`
 
-Загрузить файл в уже существующий лот.
+Получить список файлов лота.
+
+**Auth:** нужен
+
+**Кто может получать список:**
+- продавец этого лота
+- покупатель этого лота **только если статус `COMPLETED`**
+
+**Response 200:**
+массив `TicketFileResponse`
+
+---
+
+### POST `/api/tickets/{id}/files`
+
+Загрузить один или несколько файлов в уже существующий лот.
 
 **Auth:** нужен
 
 **Доступ:** только продавец этого лота
 
 **Parts:**
-- `ticketFile`
+- `ticketFiles`
 
 **Response 200:**
-`ListingDetailsResponse`
-
-**Поведение:**
-- если файла не было - файл прикрепляется
-- если файл уже был - происходит замена файла
+массив `TicketFileResponse`
 
 **Ограничения:**
-- менять файл нельзя, если статус уже `PROCESSING` или `COMPLETED`
+- менять файлы нельзя, если статус уже `PROCESSING` или `COMPLETED`
 
 **Пример:**
 
 ```ts
-async function uploadTicketFile(token: string, ticketId: number, file: File) {
+async function uploadTicketFiles(token: string, ticketId: number, files: File[]) {
   const formData = new FormData();
-  formData.append("ticketFile", file);
 
-  const response = await fetch(`http://localhost:8080/api/tickets/${ticketId}/file`, {
+  for (const file of files) {
+    formData.append("ticketFiles", file);
+  }
+
+  const response = await fetch(`http://localhost:8080/api/tickets/${ticketId}/files`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`
@@ -630,9 +662,9 @@ async function uploadTicketFile(token: string, ticketId: number, file: File) {
 
 ---
 
-### GET `/api/tickets/{id}/file/download-url`
+### GET `/api/tickets/{id}/files/{fileId}/download-url`
 
-Получить presigned URL для скачивания файла билета.
+Получить presigned URL для скачивания конкретного файла билета.
 
 **Auth:** нужен
 
@@ -655,36 +687,27 @@ async function uploadTicketFile(token: string, ticketId: number, file: File) {
 **Срок жизни ссылки:**
 - по умолчанию `15` минут
 
-**Пример:**
+---
 
-```ts
-async function getTicketFileDownloadUrl(token: string, ticketId: number) {
-  const response = await fetch(`http://localhost:8080/api/tickets/${ticketId}/file/download-url`, {
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
-  });
+### DELETE `/api/tickets/{id}/files/{fileId}`
 
-  if (!response.ok) {
-    throw await response.json();
-  }
+Удалить конкретный файл у лота.
 
-  return response.json() as Promise<TicketFileDownloadUrlResponse>;
-}
-```
+**Auth:** нужен
 
-**Открытие ссылки:**
+**Доступ:** только продавец этого лота
 
-```ts
-const fileInfo = await getTicketFileDownloadUrl(token, ticketId);
-window.open(fileInfo.url, "_blank");
-```
+**Response:**
+- `204 No Content`
+
+**Ограничения:**
+- удалять нельзя после начала покупки (`PROCESSING`, `COMPLETED`)
 
 ---
 
-### DELETE `/api/tickets/{id}/file`
+### DELETE `/api/tickets/{id}/files`
 
-Удалить файл у лота.
+Удалить все файлы у лота.
 
 **Auth:** нужен
 
@@ -698,7 +721,49 @@ window.open(fileInfo.url, "_blank");
 
 После удаления:
 - `details.hasTicketFile` станет `false`
-- `GET /file/download-url` будет возвращать ошибку
+
+---
+
+### POST `/api/tickets/{id}/file`
+
+Legacy-endpoint для загрузки **одного** файла.
+
+**Auth:** нужен
+
+**Доступ:** только продавец этого лота
+
+**Parts:**
+- `ticketFile`
+
+**Response 200:**
+массив `TicketFileResponse`
+
+**Примечание:**
+- endpoint оставлен для совместимости
+- он **добавляет** один файл, а не заменяет все файлы лота
+
+---
+
+### GET `/api/tickets/{id}/file/download-url`
+
+Legacy-endpoint для скачивания файла.
+
+**Auth:** нужен
+
+**Примечание:**
+- работает только если у лота **ровно один файл**
+- если файлов несколько, backend вернёт `400 Bad Request`
+
+---
+
+### DELETE `/api/tickets/{id}/file`
+
+Legacy-endpoint удаления файлов.
+
+**Auth:** нужен
+
+**Примечание:**
+- теперь удаляет **все** файлы у лота
 
 ---
 
@@ -897,9 +962,12 @@ window.open(fileInfo.url, "_blank");
 
 Поэтому frontend делает так:
 
-1. вызывает `GET /api/tickets/{id}/file/download-url`
-2. получает `url`
-3. открывает эту ссылку в новой вкладке или скачивает через браузер
+1. вызывает `GET /api/tickets/{id}/files`
+2. получает список файлов
+3. выбирает нужный `fileId`
+4. вызывает `GET /api/tickets/{id}/files/{fileId}/download-url`
+5. получает `url`
+6. открывает эту ссылку в новой вкладке или скачивает через браузер
 
 ### 10.2 Локальная разработка на Windows
 
@@ -924,6 +992,11 @@ window.open(fileInfo.url, "_blank");
 - `GET /api/tickets/my`
 - `POST /api/tickets/sell` (`application/json`)
 - `POST /api/tickets/sell` (`multipart/form-data`)
+- `GET /api/tickets/{id}/files`
+- `POST /api/tickets/{id}/files`
+- `GET /api/tickets/{id}/files/{fileId}/download-url`
+- `DELETE /api/tickets/{id}/files/{fileId}`
+- `DELETE /api/tickets/{id}/files`
 - `POST /api/tickets/{id}/file`
 - `GET /api/tickets/{id}/file/download-url`
 - `DELETE /api/tickets/{id}/file`
