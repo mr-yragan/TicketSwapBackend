@@ -41,6 +41,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
+    @ExceptionHandler(MailDeliveryException.class)
+    public ResponseEntity<ApiError> handleMailDelivery(MailDeliveryException ex, HttpServletRequest req) {
+        ApiError error = ApiError.of(503, "Service Unavailable", ex.getMessage(), req.getRequestURI());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(error);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiError> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest req) {
         ApiError error = ApiError.of(400, "Bad Request", ex.getMessage(), req.getRequestURI());

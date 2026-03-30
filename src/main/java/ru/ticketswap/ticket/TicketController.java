@@ -171,7 +171,7 @@ public class TicketController {
         if (principal == null || principal.getUsername() == null) {
             throw new UnauthorizedException("Unauthorized");
         }
-        return userRepository.findByEmail(principal.getUsername())
+        return userRepository.findByEmailIgnoreCase(principal.getUsername())
                 .orElseThrow(() -> new UnauthorizedException("Unauthorized"));
     }
 

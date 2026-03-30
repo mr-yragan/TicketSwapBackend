@@ -1,0 +1,82 @@
+databaseChangeLog:
+  - changeSet:
+      id: 011-add-users-two-factor-enabled
+      author: codex
+      changes:
+        - addColumn:
+            tableName: users
+            columns:
+              - column:
+                  name: two_factor_enabled
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 012-create-two-factor-challenges
+      author: codex
+      changes:
+        - createTable:
+            tableName: two_factor_challenges
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_two_factor_challenges_user
+                    references: users(id)
+              - column:
+                  name: challenge_id
+                  type: varchar(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: code_hash
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: failed_attempts
+                  type: integer
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: expires_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: consumed_at
+                  type: timestamp with time zone
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: two_factor_challenges
+            columnNames: challenge_id
+            constraintName: uq_two_factor_challenges_challenge_id
+        - createIndex:
+            tableName: two_factor_challenges
+            indexName: idx_two_factor_challenges_user_id
+            columns:
+              - column:
+                  name: user_id
+        - createIndex:
+            tableName: two_factor_challenges
+            indexName: idx_two_factor_challenges_expires_at
+            columns:
+              - column:
+                  name: expires_at

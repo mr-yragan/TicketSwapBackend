@@ -112,3 +112,23 @@ databaseChangeLog:
   - include:
       file: changes/007-tickets-add-buyer.yaml
       relativeToChangelogFile: true
+
+  - include:
+      file: changes/008-users-phone-unique.yaml
+      relativeToChangelogFile: true
+
+  - include:
+      file: changes/009-users-identity-normalization.yaml
+      relativeToChangelogFile: true
+
+  - include:
+      file: changes/010-users-login-normalization.yaml
+      relativeToChangelogFile: true
+
+  - include:
+      file: changes/011-users-two-factor-and-challenges.yaml
+      relativeToChangelogFile: true
+
+  - include:
+      file: changes/012-password-reset-tokens.yaml
+      relativeToChangelogFile: true

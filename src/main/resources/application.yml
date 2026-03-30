@@ -20,10 +20,30 @@ spring:
     enabled: true
     change-log: classpath:/db/changelog/db.changelog-master.yaml
 
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH:false}
+          starttls:
+            enable: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE:false}
+
 ticketswap:
   security:
     jwt:
       secret: ${TICKETSWAP_JWT_SECRET:ticketswap-secret-ticketswap-secret-ticketswap-secret-123456}
       expiration-ms: ${TICKETSWAP_JWT_EXPIRATION_MS:86400000}
+    two-factor:
+      code-expiration-ms: ${TICKETSWAP_2FA_CODE_EXPIRATION_MS:300000}
+      max-attempts: ${TICKETSWAP_2FA_MAX_ATTEMPTS:5}
+    password-reset:
+      token-expiration-ms: ${TICKETSWAP_PASSWORD_RESET_TOKEN_EXPIRATION_MS:900000}
   cors:
     allowed-origins: ${TICKETSWAP_CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  mail:
+    from: ${TICKETSWAP_MAIL_FROM:no-reply@ticketswap.local}
+    password-reset-url-base: ${TICKETSWAP_PASSWORD_RESET_URL_BASE:http://localhost:3000/reset-password}
