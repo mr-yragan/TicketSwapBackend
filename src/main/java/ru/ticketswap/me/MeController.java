@@ -4,24 +4,27 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import ru.ticketswap.common.UnauthorizedException;
 import ru.ticketswap.hold.ListingHold;
 import ru.ticketswap.hold.ListingHoldRepository;
 import ru.ticketswap.me.dto.HoldResponse;
 import ru.ticketswap.me.dto.MeProfileResponse;
+import ru.ticketswap.me.dto.TwoFactorStatusResponse;
 import ru.ticketswap.me.dto.UpdateMeRequest;
 import ru.ticketswap.ticket.TicketLot;
 import ru.ticketswap.ticket.TicketRepository;
 import ru.ticketswap.ticket.TicketStatus;
 import ru.ticketswap.ticket.dto.TicketLotResponse;
+import ru.ticketswap.auth.TwoFactorService;
 import ru.ticketswap.user.User;
+import ru.ticketswap.user.UserIdentityService;
 import ru.ticketswap.user.UserRepository;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @RestController
@@ -29,13 +32,23 @@ import java.util.stream.Collectors;
 public class MeController {
 
     private final UserRepository userRepository;
+    private final UserIdentityService userIdentityService;
     private final TicketRepository ticketRepository;
     private final ListingHoldRepository listingHoldRepository;
+    private final TwoFactorService twoFactorService;
 
-    public MeController(UserRepository userRepository, TicketRepository ticketRepository, ListingHoldRepository listingHoldRepository) {
+    public MeController(
+            UserRepository userRepository,
+            UserIdentityService userIdentityService,
+            TicketRepository ticketRepository,
+            ListingHoldRepository listingHoldRepository,
+            TwoFactorService twoFactorService
+    ) {
         this.userRepository = userRepository;
+        this.userIdentityService = userIdentityService;
         this.ticketRepository = ticketRepository;
         this.listingHoldRepository = listingHoldRepository;
+        this.twoFactorService = twoFactorService;
     }
 
     @GetMapping
@@ -50,15 +63,13 @@ public class MeController {
         User user = requireUser(principal);
 
         if (request.login() != null && !request.login().isBlank()) {
-            Optional<User> other = userRepository.findByLogin(request.login());
-            if (other.isPresent() && !other.get().getId().equals(user.getId())) {
-                throw new IllegalArgumentException("Login already in use");
-            }
-            user.setLogin(request.login());
+            userIdentityService.assertLoginAvailable(request.login(), user.getId());
+            user.setLogin(userIdentityService.normalizeLogin(request.login()));
         }
 
         if (request.phoneNumber() != null) {
-            user.setPhoneNumber(request.phoneNumber());
+            userIdentityService.assertPhoneAvailable(request.phoneNumber(), user.getId());
+            user.setPhoneNumber(userIdentityService.normalizePhone(request.phoneNumber()));
         }
 
         userRepository.save(user);
@@ -117,11 +128,30 @@ public class MeController {
         return ResponseEntity.ok(res);
     }
 
+    @PostMapping("/2fa/enable")
+    @Transactional
+    public ResponseEntity<TwoFactorStatusResponse> enableTwoFactor(@AuthenticationPrincipal UserDetails principal) {
+        User user = requireUser(principal);
+        user.setTwoFactorEnabled(true);
+        userRepository.save(user);
+        return ResponseEntity.ok(new TwoFactorStatusResponse(true));
+    }
+
+    @PostMapping("/2fa/disable")
+    @Transactional
+    public ResponseEntity<TwoFactorStatusResponse> disableTwoFactor(@AuthenticationPrincipal UserDetails principal) {
+        User user = requireUser(principal);
+        user.setTwoFactorEnabled(false);
+        userRepository.save(user);
+        twoFactorService.invalidateChallengesForUser(user.getId());
+        return ResponseEntity.ok(new TwoFactorStatusResponse(false));
+    }
+
     private User requireUser(UserDetails principal) {
         if (principal == null || principal.getUsername() == null) {
             throw new UnauthorizedException("Unauthorized");
         }
-        return userRepository.findByEmail(principal.getUsername())
+        return userRepository.findByEmailIgnoreCase(principal.getUsername())
                 .orElseThrow(() -> new UnauthorizedException("Unauthorized"));
     }
 
@@ -132,6 +162,7 @@ public class MeController {
                 user.getLogin(),
                 user.getPhoneNumber(),
                 user.getRole(),
+                user.isTwoFactorEnabled(),
                 user.getCreatedAt()
         );
     }
