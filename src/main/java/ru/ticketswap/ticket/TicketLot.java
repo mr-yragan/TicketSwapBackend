@@ -39,6 +39,18 @@ public class TicketLot {
     @Column(name = "seller_comment", length = 2000)
     private String sellerComment;
 
+    @Column(name = "ticket_file_object_key")
+    private String ticketFileObjectKey;
+
+    @Column(name = "ticket_file_original_name")
+    private String ticketFileOriginalName;
+
+    @Column(name = "ticket_file_content_type", length = 100)
+    private String ticketFileContentType;
+
+    @Column(name = "ticket_file_size_bytes")
+    private Long ticketFileSizeBytes;
+
     @Column(nullable = false)
     private BigDecimal originalPrice;
 
@@ -84,10 +96,8 @@ public class TicketLot {
         this.additionalInfo = additionalInfo;
         this.organizerName = organizerName;
         this.sellerComment = sellerComment;
-
         this.originalPrice = price;
         this.resalePrice = price;
-
         this.seller = seller;
         this.status = TicketStatus.CREATED;
         this.createdAt = Instant.now();
@@ -127,6 +137,40 @@ public class TicketLot {
 
     public String getSellerComment() {
         return sellerComment;
+    }
+
+    public String getTicketFileObjectKey() {
+        return ticketFileObjectKey;
+    }
+
+    public String getTicketFileOriginalName() {
+        return ticketFileOriginalName;
+    }
+
+    public String getTicketFileContentType() {
+        return ticketFileContentType;
+    }
+
+    public Long getTicketFileSizeBytes() {
+        return ticketFileSizeBytes;
+    }
+
+    public boolean hasTicketFile() {
+        return ticketFileObjectKey != null && !ticketFileObjectKey.isBlank();
+    }
+
+    public void updateTicketFile(String objectKey, String originalName, String contentType, long sizeBytes) {
+        this.ticketFileObjectKey = objectKey;
+        this.ticketFileOriginalName = originalName;
+        this.ticketFileContentType = contentType;
+        this.ticketFileSizeBytes = sizeBytes;
+    }
+
+    public void clearTicketFile() {
+        this.ticketFileObjectKey = null;
+        this.ticketFileOriginalName = null;
+        this.ticketFileContentType = null;
+        this.ticketFileSizeBytes = null;
     }
 
     public BigDecimal getOriginalPrice() {

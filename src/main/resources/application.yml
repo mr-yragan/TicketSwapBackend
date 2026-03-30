@@ -20,6 +20,11 @@ spring:
     enabled: true
     change-log: classpath:/db/changelog/db.changelog-master.yaml
 
+  servlet:
+    multipart:
+      max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:10MB}
+      max-request-size: ${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE:10MB}
+
 ticketswap:
   security:
     jwt:
@@ -27,3 +32,11 @@ ticketswap:
       expiration-ms: ${TICKETSWAP_JWT_EXPIRATION_MS:86400000}
   cors:
     allowed-origins: ${TICKETSWAP_CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  storage:
+    s3:
+      endpoint: ${TICKETSWAP_STORAGE_S3_ENDPOINT:http://localhost:9000}
+      access-key: ${TICKETSWAP_STORAGE_S3_ACCESS_KEY:minioadmin}
+      secret-key: ${TICKETSWAP_STORAGE_S3_SECRET_KEY:minioadmin123}
+      bucket: ${TICKETSWAP_STORAGE_S3_BUCKET:ticketswap-ticket-files}
+      presigned-get-expiry-minutes: ${TICKETSWAP_STORAGE_S3_PRESIGNED_GET_EXPIRY_MINUTES:15}
+      auto-create-bucket: ${TICKETSWAP_STORAGE_S3_AUTO_CREATE_BUCKET:true}

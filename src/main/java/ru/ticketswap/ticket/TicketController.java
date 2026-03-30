@@ -2,18 +2,24 @@ package ru.ticketswap.ticket;
 
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import ru.ticketswap.common.BusinessRuleException;
+import ru.ticketswap.common.NotFoundException;
 import ru.ticketswap.common.UnauthorizedException;
 import ru.ticketswap.hold.ListingHold;
 import ru.ticketswap.hold.ListingHoldRepository;
 import ru.ticketswap.hold.dto.ListingHoldResponse;
 import ru.ticketswap.purchase.PurchaseService;
+import ru.ticketswap.storage.TicketFileStorageService;
 import ru.ticketswap.ticket.dto.CreateTicketRequest;
 import ru.ticketswap.ticket.dto.ListingDetailsResponse;
 import ru.ticketswap.ticket.dto.ListingViewResponse;
+import ru.ticketswap.ticket.dto.TicketFileDownloadUrlResponse;
 import ru.ticketswap.ticket.dto.TicketLotResponse;
 import ru.ticketswap.user.User;
 import ru.ticketswap.user.UserRepository;
@@ -35,19 +41,22 @@ public class TicketController {
     private final ListingHoldRepository listingHoldRepository;
     private final PurchaseService purchaseService;
     private final ListingLifecycleService listingLifecycleService;
+    private final TicketFileStorageService ticketFileStorageService;
 
     public TicketController(
             TicketRepository ticketRepository,
             UserRepository userRepository,
             ListingHoldRepository listingHoldRepository,
             PurchaseService purchaseService,
-            ListingLifecycleService listingLifecycleService
+            ListingLifecycleService listingLifecycleService,
+            TicketFileStorageService ticketFileStorageService
     ) {
         this.ticketRepository = ticketRepository;
         this.userRepository = userRepository;
         this.listingHoldRepository = listingHoldRepository;
         this.purchaseService = purchaseService;
         this.listingLifecycleService = listingLifecycleService;
+        this.ticketFileStorageService = ticketFileStorageService;
     }
 
     @GetMapping
@@ -68,8 +77,7 @@ public class TicketController {
 
     @GetMapping("/{id}")
     public ResponseEntity<ListingViewResponse> getListing(@PathVariable("id") Long id) {
-        TicketLot ticket = ticketRepository.findById(id)
-                .orElseThrow(() -> new ru.ticketswap.common.NotFoundException("Ticket not found"));
+        TicketLot ticket = loadTicket(id);
 
         Optional<ListingHold> activeHold = listingHoldRepository.findByListingIdAndHoldUntilAfter(id, Instant.now());
         ListingViewResponse.Hold hold = activeHold
@@ -85,33 +93,70 @@ public class TicketController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/sell")
+    @PostMapping(value = "/sell", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ListingDetailsResponse> sellTicket(
             @Valid @RequestBody CreateTicketRequest request,
             @AuthenticationPrincipal UserDetails userDetails
     ) {
         User seller = requireUser(userDetails);
-
-        VenueParts venueParts = parseVenueParts(request.venue());
-
-        TicketLot ticket = new TicketLot(
-                request.uid(),
-                request.eventName(),
-                request.eventDate(),
-                venueParts.venueName(),
-                venueParts.venueCity(),
-                request.price(),
-                request.additionalInfo(),
-                request.organizerName(),
-                request.sellerComment(),
-                seller
-        );
-
-        TicketLot saved = ticketRepository.saveAndFlush(ticket);
-
+        TicketLot saved = createListing(request, seller);
         listingLifecycleService.onListingCreated(saved.getId());
-
         return ResponseEntity.status(HttpStatus.CREATED).body(toDetailsResponse(saved));
+    }
+
+    @PostMapping(value = "/sell", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ListingDetailsResponse> sellTicketWithFile(
+            @Valid @RequestPart("ticket") CreateTicketRequest request,
+            @RequestPart("ticketFile") MultipartFile ticketFile,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        User seller = requireUser(userDetails);
+        TicketLot saved = createListing(request, seller);
+
+        try {
+            saved = ticketFileStorageService.uploadTicketFile(saved, ticketFile);
+            listingLifecycleService.onListingCreated(saved.getId());
+            return ResponseEntity.status(HttpStatus.CREATED).body(toDetailsResponse(saved));
+        } catch (RuntimeException ex) {
+            ticketRepository.deleteById(saved.getId());
+            throw ex;
+        }
+    }
+
+    @PostMapping(value = "/{id}/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ListingDetailsResponse> uploadTicketFile(
+            @PathVariable("id") Long id,
+            @RequestPart("ticketFile") MultipartFile ticketFile,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        User seller = requireUser(userDetails);
+        TicketLot ticket = loadTicket(id);
+        ensureSellerCanModifyFile(ticket, seller);
+        TicketLot saved = ticketFileStorageService.uploadTicketFile(ticket, ticketFile);
+        return ResponseEntity.ok(toDetailsResponse(saved));
+    }
+
+    @GetMapping("/{id}/file/download-url")
+    public ResponseEntity<TicketFileDownloadUrlResponse> getTicketFileDownloadUrl(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        User currentUser = requireUser(userDetails);
+        TicketLot ticket = loadTicket(id);
+        ensureCanReadTicketFile(ticket, currentUser);
+        return ResponseEntity.ok(ticketFileStorageService.createDownloadUrl(ticket));
+    }
+
+    @DeleteMapping("/{id}/file")
+    public ResponseEntity<Void> deleteTicketFile(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        User seller = requireUser(userDetails);
+        TicketLot ticket = loadTicket(id);
+        ensureSellerCanModifyFile(ticket, seller);
+        ticketFileStorageService.deleteTicketFile(ticket);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/hold")
@@ -123,8 +168,7 @@ public class TicketController {
 
         ListingHold hold = purchaseService.createHold(id, buyer);
 
-        TicketLot listing = ticketRepository.findById(id)
-                .orElseThrow(() -> new ru.ticketswap.common.NotFoundException("Ticket not found"));
+        TicketLot listing = loadTicket(id);
 
         ListingHoldResponse response = new ListingHoldResponse(
                 hold.getId(),
@@ -159,12 +203,34 @@ public class TicketController {
     @GetMapping("/my")
     public ResponseEntity<List<TicketLotResponse>> myTickets(@AuthenticationPrincipal UserDetails userDetails) {
         User user = requireUser(userDetails);
-
         List<TicketLotResponse> response = ticketRepository.findAllBySellerIdOrderByCreatedAtDesc(user.getId()).stream()
                 .map(this::toTicketLotResponse)
                 .toList();
-
         return ResponseEntity.ok(response);
+    }
+
+    private TicketLot createListing(CreateTicketRequest request, User seller) {
+        VenueParts venueParts = parseVenueParts(request.venue());
+
+        TicketLot ticket = new TicketLot(
+                request.uid(),
+                request.eventName(),
+                request.eventDate(),
+                venueParts.venueName(),
+                venueParts.venueCity(),
+                request.price(),
+                request.additionalInfo(),
+                request.organizerName(),
+                request.sellerComment(),
+                seller
+        );
+
+        return ticketRepository.saveAndFlush(ticket);
+    }
+
+    private TicketLot loadTicket(Long id) {
+        return ticketRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Ticket not found"));
     }
 
     private User requireUser(UserDetails principal) {
@@ -173,6 +239,30 @@ public class TicketController {
         }
         return userRepository.findByEmail(principal.getUsername())
                 .orElseThrow(() -> new UnauthorizedException("Unauthorized"));
+    }
+
+    private void ensureSellerCanModifyFile(TicketLot ticket, User seller) {
+        if (ticket.getSeller() == null || ticket.getSeller().getId() == null || !ticket.getSeller().getId().equals(seller.getId())) {
+            throw new UnauthorizedException("You can modify only your own ticket file");
+        }
+        if (ticket.getStatus() == TicketStatus.PROCESSING || ticket.getStatus() == TicketStatus.COMPLETED) {
+            throw new BusinessRuleException("Ticket file cannot be changed after purchase has started");
+        }
+    }
+
+    private void ensureCanReadTicketFile(TicketLot ticket, User currentUser) {
+        boolean isSeller = ticket.getSeller() != null
+                && ticket.getSeller().getId() != null
+                && ticket.getSeller().getId().equals(currentUser.getId());
+
+        boolean isCompletedBuyer = ticket.getStatus() == TicketStatus.COMPLETED
+                && ticket.getBuyer() != null
+                && ticket.getBuyer().getId() != null
+                && ticket.getBuyer().getId().equals(currentUser.getId());
+
+        if (!isSeller && !isCompletedBuyer) {
+            throw new UnauthorizedException("You do not have access to this ticket file");
+        }
     }
 
     private TicketLotResponse toTicketLotResponse(TicketLot ticket) {
@@ -206,7 +296,8 @@ public class TicketController {
                 ticket.getAdditionalInfo(),
                 ticket.getOrganizerName(),
                 ticket.getSellerComment(),
-                sellerInfo
+                sellerInfo,
+                ticket.hasTicketFile()
         );
     }
 
@@ -227,17 +318,14 @@ public class TicketController {
         if (venueLine == null) {
             return new VenueParts("", "");
         }
-
         String trimmed = venueLine.trim();
         if (trimmed.isEmpty()) {
             return new VenueParts("", "");
         }
-
         int comma = trimmed.indexOf(',');
         if (comma < 0) {
             return new VenueParts(trimmed, "");
         }
-
         String name = trimmed.substring(0, comma).trim();
         String city = trimmed.substring(comma + 1).trim();
         return new VenueParts(name, city);
@@ -246,7 +334,6 @@ public class TicketController {
     private String formatVenue(String venueName, String venueCity) {
         String name = venueName == null ? "" : venueName.trim();
         String city = venueCity == null ? "" : venueCity.trim();
-
         if (name.isEmpty() && city.isEmpty()) {
             return "";
         }

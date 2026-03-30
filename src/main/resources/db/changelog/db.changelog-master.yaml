@@ -112,3 +112,7 @@ databaseChangeLog:
   - include:
       file: changes/007-tickets-add-buyer.yaml
       relativeToChangelogFile: true
+
+  - include:
+      file: changes/008-tickets-add-file-storage.yaml
+      relativeToChangelogFile: true
