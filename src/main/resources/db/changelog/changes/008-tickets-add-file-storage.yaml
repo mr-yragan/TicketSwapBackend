@@ -1,0 +1,28 @@
+databaseChangeLog:
+  - changeSet:
+      id: 8-tickets-add-file-storage-columns
+      author: vanya
+      changes:
+        - addColumn:
+            tableName: tickets
+            columns:
+              - column:
+                  name: ticket_file_object_key
+                  type: varchar(512)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: ticket_file_original_name
+                  type: varchar(255)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: ticket_file_content_type
+                  type: varchar(100)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: ticket_file_size_bytes
+                  type: bigint
+                  constraints:
+                    nullable: true
