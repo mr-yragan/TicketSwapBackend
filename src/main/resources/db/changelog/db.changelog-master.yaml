@@ -119,6 +119,9 @@ databaseChangeLog:
 
   - include:
       file: changes/009-ticket-files-table.yaml
+      relativeToChangelogFile: true
+
+  - include:
       file: changes/008-users-phone-unique.yaml
       relativeToChangelogFile: true
 
