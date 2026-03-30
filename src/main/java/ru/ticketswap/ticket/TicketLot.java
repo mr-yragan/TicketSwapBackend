@@ -6,6 +6,9 @@ import ru.ticketswap.user.User;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 @Entity
 @Table(name = "tickets")
@@ -57,6 +60,9 @@ public class TicketLot {
     @JoinColumn(name = "buyer_id")
     private User buyer;
 
+    @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @OrderBy("createdAt ASC, id ASC")
+    private List<TicketFile> ticketFiles = new ArrayList<>();
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -84,10 +90,8 @@ public class TicketLot {
         this.additionalInfo = additionalInfo;
         this.organizerName = organizerName;
         this.sellerComment = sellerComment;
-
         this.originalPrice = price;
         this.resalePrice = price;
-
         this.seller = seller;
         this.status = TicketStatus.CREATED;
         this.createdAt = Instant.now();
@@ -155,6 +159,37 @@ public class TicketLot {
 
     public void setStatus(TicketStatus status) {
         this.status = status;
+    }
+
+    public List<TicketFile> getTicketFiles() {
+        return Collections.unmodifiableList(ticketFiles);
+    }
+
+    public boolean hasTicketFile() {
+        return !ticketFiles.isEmpty();
+    }
+
+    public int getTicketFilesCount() {
+        return ticketFiles.size();
+    }
+
+    public TicketFile getOnlyTicketFileOrNull() {
+        if (ticketFiles.size() != 1) {
+            return null;
+        }
+        return ticketFiles.get(0);
+    }
+
+    public void addTicketFile(TicketFile ticketFile) {
+        this.ticketFiles.add(ticketFile);
+    }
+
+    public void removeTicketFile(TicketFile ticketFile) {
+        this.ticketFiles.remove(ticketFile);
+    }
+
+    public void clearTicketFiles() {
+        this.ticketFiles.clear();
     }
 
     public Instant getCreatedAt() {

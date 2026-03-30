@@ -11,7 +11,9 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.NoHandlerFoundException;
+import ru.ticketswap.storage.TicketFileStorageException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -23,6 +25,7 @@ public class GlobalExceptionHandler {
         ApiError error = ApiError.of(401, "Unauthorized", ex.getMessage(), req.getRequestURI());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
     }
+
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ApiError> handleNotFoundDomain(NotFoundException ex, HttpServletRequest req) {
         ApiError error = ApiError.of(404, "Not Found", ex.getMessage(), req.getRequestURI());
@@ -53,7 +56,6 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
-
     @ExceptionHandler(NoHandlerFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(NoHandlerFoundException ex, HttpServletRequest req) {
         ApiError error = ApiError.of(404, "Not Found", "Not Found", req.getRequestURI());
@@ -82,6 +84,19 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleDataIntegrityViolation(DataIntegrityViolationException ex, HttpServletRequest req) {
         ApiError error = ApiError.of(409, "Conflict", "Data integrity violation", req.getRequestURI());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiError> handleMaxUploadSize(MaxUploadSizeExceededException ex, HttpServletRequest req) {
+        ApiError error = ApiError.of(413, "Payload Too Large", "Ticket file is too large", req.getRequestURI());
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(error);
+    }
+
+    @ExceptionHandler(TicketFileStorageException.class)
+    public ResponseEntity<ApiError> handleTicketFileStorage(TicketFileStorageException ex, HttpServletRequest req) {
+        log.error("Ticket file storage exception", ex);
+        ApiError error = ApiError.of(500, "Internal Server Error", "Failed to process ticket file", req.getRequestURI());
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
     }
 
     @ExceptionHandler(Exception.class)

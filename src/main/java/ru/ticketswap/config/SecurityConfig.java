@@ -2,6 +2,7 @@ package ru.ticketswap.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -11,8 +12,6 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-
-import org.springframework.http.HttpMethod;
 
 import java.util.List;
 
@@ -52,6 +51,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/tickets/my").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/tickets/*/file", "/api/tickets/*/file/**", "/api/tickets/*/files", "/api/tickets/*/files/**").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/tickets/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/tickets/**").permitAll()
                         .requestMatchers("/error").permitAll()

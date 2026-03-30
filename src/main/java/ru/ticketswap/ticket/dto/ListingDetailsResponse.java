@@ -11,12 +11,12 @@ public record ListingDetailsResponse(
         String venue,
         BigDecimal price,
         boolean verified,
-
         String additionalInfo,
         String organizerName,
         String sellerComment,
-
-        SellerInfo seller
+        SellerInfo seller,
+        boolean hasTicketFile,
+        int ticketFilesCount
 ) {
 
     public record SellerInfo(

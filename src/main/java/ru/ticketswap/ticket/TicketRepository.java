@@ -9,16 +9,16 @@ import java.util.Optional;
 public interface TicketRepository extends JpaRepository<TicketLot, Long> {
 
     @Override
-    @EntityGraph(attributePaths = {"seller", "buyer"})
+    @EntityGraph(attributePaths = {"seller", "buyer", "ticketFiles"})
     List<TicketLot> findAll();
 
     @Override
-    @EntityGraph(attributePaths = {"seller", "buyer"})
+    @EntityGraph(attributePaths = {"seller", "buyer", "ticketFiles"})
     Optional<TicketLot> findById(Long id);
 
-    @EntityGraph(attributePaths = {"seller", "buyer"})
+    @EntityGraph(attributePaths = {"seller", "buyer", "ticketFiles"})
     List<TicketLot> findAllBySellerIdOrderByCreatedAtDesc(Long sellerId);
 
-    @EntityGraph(attributePaths = {"seller", "buyer"})
+    @EntityGraph(attributePaths = {"seller", "buyer", "ticketFiles"})
     List<TicketLot> findAllByBuyerIdOrderByEventDateAsc(Long buyerId);
 }
