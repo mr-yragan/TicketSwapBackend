@@ -1,7 +1,7 @@
 databaseChangeLog:
   - changeSet:
       id: 10-normalize-user-logins
-      author: codex
+      author: nikolay
       preConditions:
         - onFail: HALT
         - onError: HALT

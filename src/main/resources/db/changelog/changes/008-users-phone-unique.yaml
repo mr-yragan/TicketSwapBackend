@@ -1,7 +1,7 @@
 databaseChangeLog:
   - changeSet:
       id: 8-add-users-phone-number-unique
-      author: codex
+      author: nikolay
       validCheckSum: ANY
       preConditions:
         - onFail: HALT

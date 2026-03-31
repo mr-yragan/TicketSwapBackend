@@ -1,7 +1,7 @@
 databaseChangeLog:
   - changeSet:
       id: 9-normalize-user-identifiers
-      author: codex
+      author: nikolay
       preConditions:
         - onFail: HALT
         - onError: HALT

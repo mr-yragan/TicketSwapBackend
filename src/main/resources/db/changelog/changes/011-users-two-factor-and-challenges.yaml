@@ -1,7 +1,7 @@
 databaseChangeLog:
   - changeSet:
       id: 011-add-users-two-factor-enabled
-      author: codex
+      author: nikolay
       changes:
         - addColumn:
             tableName: users
@@ -15,7 +15,7 @@ databaseChangeLog:
 
   - changeSet:
       id: 012-create-two-factor-challenges
-      author: codex
+      author: nikolay
       changes:
         - createTable:
             tableName: two_factor_challenges
