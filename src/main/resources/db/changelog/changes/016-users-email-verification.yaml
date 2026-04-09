@@ -1,0 +1,73 @@
+databaseChangeLog:
+  - logicalFilePath: changes/014-users-email-verification.yaml
+
+  - changeSet:
+      id: 015-add-users-email-verified
+      author: vanya
+      changes:
+        - addColumn:
+            tableName: users
+            columns:
+              - column:
+                  name: email_verified
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 016-create-email-verification-tokens
+      author: vanya
+      changes:
+        - createTable:
+            tableName: email_verification_tokens
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_email_verification_tokens_user
+                    references: users(id)
+              - column:
+                  name: token_hash
+                  type: varchar(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: expires_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: consumed_at
+                  type: timestamp with time zone
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: email_verification_tokens
+            columnNames: token_hash
+            constraintName: uq_email_verification_tokens_token_hash
+        - createIndex:
+            tableName: email_verification_tokens
+            indexName: idx_email_verification_tokens_user_id
+            columns:
+              - column:
+                  name: user_id
+        - createIndex:
+            tableName: email_verification_tokens
+            indexName: idx_email_verification_tokens_expires_at
+            columns:
+              - column:
+                  name: expires_at

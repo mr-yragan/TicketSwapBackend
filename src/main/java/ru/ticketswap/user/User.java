@@ -30,6 +30,9 @@ public class User {
     @Column(name = "phone_number", unique = true, length = 33)
     private String phoneNumber;
 
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
     @Column(nullable = false, length = 50)
     private String role;
 
@@ -46,6 +49,7 @@ public class User {
         this.email = email;
         this.passwordHash = passwordHash;
         this.role = "USER";
+        this.emailVerified = false;
     }
 
     @PrePersist
@@ -86,6 +90,14 @@ public class User {
 
     public void setPhoneNumber(String phoneNumber) {
         this.phoneNumber = phoneNumber;
+    }
+
+    public boolean isEmailVerified() {
+        return emailVerified;
+    }
+
+    public void setEmailVerified(boolean emailVerified) {
+        this.emailVerified = emailVerified;
     }
 
     public String getRole() {

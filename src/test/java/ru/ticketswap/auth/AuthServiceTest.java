@@ -52,6 +52,9 @@ class AuthServiceTest {
     private MailService mailService;
 
     @Mock
+    private EmailVerificationService emailVerificationService;
+
+    @Mock
     private Authentication authentication;
 
     @Test
@@ -63,17 +66,22 @@ class AuthServiceTest {
                 authenticationManager,
                 jwtService,
                 twoFactorService,
-                mailService
+                mailService,
+                emailVerificationService
         );
-        AuthRequest request = new AuthRequest("User@Example.com", "password123");
+
+        AuthRequest request = new AuthRequest("User@Example.com", "test_login", "password123");
 
         when(userIdentityService.normalizeEmail("User@Example.com")).thenReturn("user@example.com");
         when(userIdentityService.emailExists("user@example.com")).thenReturn(false);
+        when(userIdentityService.normalizeLogin("test_login")).thenReturn("test_login");
         when(passwordEncoder.encode("password123")).thenReturn("encoded-password");
 
         authService.register(request);
 
+        verify(userIdentityService).assertLoginAvailable("test_login", null);
         verify(userRepository).save(any(User.class));
+        verify(emailVerificationService).createAndSendVerificationToken(any(User.class));
     }
 
     @Test
@@ -85,10 +93,13 @@ class AuthServiceTest {
                 authenticationManager,
                 jwtService,
                 twoFactorService,
-                mailService
+                mailService,
+                emailVerificationService
         );
+
         LoginRequest request = new LoginRequest("user@example.com", "password123");
         User user = new User("user@example.com", "hash");
+        user.setEmailVerified(true);
 
         when(authenticationManager.authenticate(any())).thenReturn(authentication);
         when(authentication.getName()).thenReturn("user@example.com");
@@ -112,10 +123,13 @@ class AuthServiceTest {
                 authenticationManager,
                 jwtService,
                 twoFactorService,
-                mailService
+                mailService,
+                emailVerificationService
         );
+
         LoginRequest request = new LoginRequest("user@example.com", "password123");
         User user = new User("user@example.com", "hash");
+        user.setEmailVerified(true);
         user.setTwoFactorEnabled(true);
         Instant expiresAt = Instant.parse("2026-03-30T12:00:00Z");
 
@@ -143,8 +157,10 @@ class AuthServiceTest {
                 authenticationManager,
                 jwtService,
                 twoFactorService,
-                mailService
+                mailService,
+                emailVerificationService
         );
+
         User user = new User("user@example.com", "hash");
 
         when(twoFactorService.verifyCode("challenge-123", "123456")).thenReturn(user);

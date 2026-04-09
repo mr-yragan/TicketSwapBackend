@@ -33,10 +33,10 @@ public class TicketSwapProperties {
     }
 
     public static class Security {
-
         private final Jwt jwt = new Jwt();
         private final TwoFactor twoFactor = new TwoFactor();
         private final PasswordReset passwordReset = new PasswordReset();
+        private final EmailVerification emailVerification = new EmailVerification();
 
         public Jwt getJwt() {
             return jwt;
@@ -50,8 +50,11 @@ public class TicketSwapProperties {
             return passwordReset;
         }
 
-        public static class Jwt {
+        public EmailVerification getEmailVerification() {
+            return emailVerification;
+        }
 
+        public static class Jwt {
             @NotBlank
             private String secret;
 
@@ -76,7 +79,6 @@ public class TicketSwapProperties {
         }
 
         public static class TwoFactor {
-
             @Min(60_000)
             private long codeExpirationMs;
 
@@ -101,7 +103,19 @@ public class TicketSwapProperties {
         }
 
         public static class PasswordReset {
+            @Min(60_000)
+            private long tokenExpirationMs;
 
+            public long getTokenExpirationMs() {
+                return tokenExpirationMs;
+            }
+
+            public void setTokenExpirationMs(long tokenExpirationMs) {
+                this.tokenExpirationMs = tokenExpirationMs;
+            }
+        }
+
+        public static class EmailVerification {
             @Min(60_000)
             private long tokenExpirationMs;
 
@@ -116,7 +130,6 @@ public class TicketSwapProperties {
     }
 
     public static class Cors {
-
         private List<String> allowedOrigins;
 
         public List<String> getAllowedOrigins() {
@@ -129,7 +142,6 @@ public class TicketSwapProperties {
     }
 
     public static class Storage {
-
         private final S3 s3 = new S3();
 
         public S3 getS3() {
@@ -137,7 +149,6 @@ public class TicketSwapProperties {
         }
 
         public static class S3 {
-
             @NotBlank
             private String endpoint;
 
@@ -154,9 +165,7 @@ public class TicketSwapProperties {
             private int presignedGetExpiryMinutes = 15;
 
             private String publicEndpoint;
-
             private String region = "us-east-1";
-
             private boolean autoCreateBucket = true;
 
             public String getEndpoint() {
@@ -226,12 +235,14 @@ public class TicketSwapProperties {
     }
 
     public static class Mail {
-
         @NotBlank
         private String from;
 
         @NotBlank
         private String passwordResetUrlBase;
+
+        @NotBlank
+        private String emailVerificationUrlBase;
 
         public String getFrom() {
             return from;
@@ -247,6 +258,14 @@ public class TicketSwapProperties {
 
         public void setPasswordResetUrlBase(String passwordResetUrlBase) {
             this.passwordResetUrlBase = passwordResetUrlBase;
+        }
+
+        public String getEmailVerificationUrlBase() {
+            return emailVerificationUrlBase;
+        }
+
+        public void setEmailVerificationUrlBase(String emailVerificationUrlBase) {
+            this.emailVerificationUrlBase = emailVerificationUrlBase;
         }
     }
 }

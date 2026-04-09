@@ -4,15 +4,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import ru.ticketswap.auth.dto.AuthRequest;
-import ru.ticketswap.auth.dto.AuthResponse;
-import ru.ticketswap.auth.dto.ForgotPasswordRequest;
-import ru.ticketswap.auth.dto.ForgotPasswordResponse;
-import ru.ticketswap.auth.dto.LoginRequest;
-import ru.ticketswap.auth.dto.LoginResponse;
-import ru.ticketswap.auth.dto.ResetPasswordRequest;
-import ru.ticketswap.auth.dto.ResetPasswordResponse;
-import ru.ticketswap.auth.dto.TwoFactorVerifyRequest;
+import ru.ticketswap.auth.dto.*;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -20,21 +12,40 @@ public class AuthController {
 
     private final AuthService authService;
     private final PasswordResetService passwordResetService;
+    private final EmailVerificationService emailVerificationService;
 
-    public AuthController(AuthService authService, PasswordResetService passwordResetService) {
+    public AuthController(
+            AuthService authService,
+            PasswordResetService passwordResetService,
+            EmailVerificationService emailVerificationService
+    ) {
         this.authService = authService;
         this.passwordResetService = passwordResetService;
+        this.emailVerificationService = emailVerificationService;
     }
 
     @PostMapping("/register")
-    public ResponseEntity<Void> register(@Valid @RequestBody AuthRequest request) {
+    public ResponseEntity<EmailVerificationResponse> register(@Valid @RequestBody AuthRequest request) {
         authService.register(request);
-        return ResponseEntity.status(HttpStatus.CREATED).build();
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new EmailVerificationResponse("Registration successful. Please verify your email"));
     }
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    @PostMapping("/email/verify")
+    public ResponseEntity<EmailVerificationResponse> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        return ResponseEntity.ok(emailVerificationService.verifyEmail(request.token()));
+    }
+
+    @PostMapping("/email/resend-verification")
+    public ResponseEntity<EmailVerificationResponse> resendVerification(
+            @Valid @RequestBody ResendEmailVerificationRequest request
+    ) {
+        return ResponseEntity.ok(emailVerificationService.resendVerification(request.email()));
     }
 
     @PostMapping("/2fa/verify")

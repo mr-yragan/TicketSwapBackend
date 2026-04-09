@@ -32,7 +32,6 @@ public class MailService {
         message.setSubject("TicketSwap login confirmation code");
         message.setText("""
                 Your TicketSwap confirmation code is: %s
-
                 The code expires at: %s
 
                 If you did not try to sign in, ignore this email.
@@ -41,11 +40,7 @@ public class MailService {
                 EXPIRES_AT_FORMATTER.format(expiresAt.atOffset(ZoneOffset.UTC))
         ));
 
-        try {
-            mailSender.send(message);
-        } catch (MailException ex) {
-            throw new MailDeliveryException("Unable to send confirmation code", ex);
-        }
+        send(message, "Unable to send confirmation code");
     }
 
     public void sendPasswordResetLink(String recipientEmail, String token, Instant expiresAt) {
@@ -62,7 +57,6 @@ public class MailService {
                 We received a request to reset your TicketSwap password.
 
                 Reset link: %s
-
                 The link expires at: %s
 
                 If you did not request a password reset, ignore this email.
@@ -71,10 +65,41 @@ public class MailService {
                 EXPIRES_AT_FORMATTER.format(expiresAt.atOffset(ZoneOffset.UTC))
         ));
 
+        send(message, "Unable to send password reset email");
+    }
+
+    public void sendEmailVerificationLink(String recipientEmail, String token, Instant expiresAt) {
+        String verifyLink = UriComponentsBuilder.fromUriString(properties.getMail().getEmailVerificationUrlBase())
+                .queryParam("token", token)
+                .build()
+                .toUriString();
+
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(properties.getMail().getFrom());
+        message.setTo(recipientEmail);
+        message.setSubject("TicketSwap email verification");
+        message.setText("""
+                Welcome to TicketSwap.
+
+                Please verify your email address using this link:
+                %s
+
+                The link expires at: %s
+
+                If you did not create this account, ignore this email.
+                """.formatted(
+                verifyLink,
+                EXPIRES_AT_FORMATTER.format(expiresAt.atOffset(ZoneOffset.UTC))
+        ));
+
+        send(message, "Unable to send email verification email");
+    }
+
+    private void send(SimpleMailMessage message, String errorMessage) {
         try {
             mailSender.send(message);
         } catch (MailException ex) {
-            throw new MailDeliveryException("Unable to send password reset email", ex);
+            throw new MailDeliveryException(errorMessage, ex);
         }
     }
 }

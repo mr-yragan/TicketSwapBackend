@@ -28,6 +28,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final TwoFactorService twoFactorService;
     private final MailService mailService;
+    private final EmailVerificationService emailVerificationService;
 
     public AuthService(
             UserRepository userRepository,
@@ -36,7 +37,8 @@ public class AuthService {
             AuthenticationManager authenticationManager,
             JwtService jwtService,
             TwoFactorService twoFactorService,
-            MailService mailService
+            MailService mailService,
+            EmailVerificationService emailVerificationService
     ) {
         this.userRepository = userRepository;
         this.userIdentityService = userIdentityService;
@@ -45,21 +47,25 @@ public class AuthService {
         this.jwtService = jwtService;
         this.twoFactorService = twoFactorService;
         this.mailService = mailService;
+        this.emailVerificationService = emailVerificationService;
     }
 
     @Transactional
     public void register(AuthRequest request) {
         String normalizedEmail = userIdentityService.normalizeEmail(request.email());
-
         if (userIdentityService.emailExists(normalizedEmail)) {
             throw new ConflictException("Email already exists");
         }
 
-        User user = new User(
-                normalizedEmail,
-                passwordEncoder.encode(request.password())
-        );
+        String normalizedLogin = userIdentityService.normalizeLogin(request.login());
+        userIdentityService.assertLoginAvailable(normalizedLogin, null);
+
+        User user = new User(normalizedEmail, passwordEncoder.encode(request.password()));
+        user.setLogin(normalizedLogin);
+        user.setEmailVerified(false);
         userRepository.save(user);
+
+        emailVerificationService.createAndSendVerificationToken(user);
     }
 
     @Transactional
@@ -76,13 +82,16 @@ public class AuthService {
         User user = userIdentityService.findUserByEmail(authentication.getName())
                 .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
 
+        if (!user.isEmailVerified()) {
+            throw new UnauthorizedException("Email is not verified");
+        }
+
         if (!user.isTwoFactorEnabled()) {
             return LoginResponse.authenticated(jwtService.generate(user.getEmail()));
         }
 
         TwoFactorService.PendingTwoFactorChallenge challenge = twoFactorService.createChallenge(user);
         mailService.sendTwoFactorCode(user.getEmail(), challenge.code(), challenge.expiresAt());
-
         return LoginResponse.twoFactorRequired(challenge.challengeId(), challenge.expiresAt());
     }
 

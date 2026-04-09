@@ -4,20 +4,17 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import ru.ticketswap.common.UnauthorizedException;
 import ru.ticketswap.hold.ListingHold;
 import ru.ticketswap.hold.ListingHoldRepository;
 import ru.ticketswap.me.dto.HoldResponse;
 import ru.ticketswap.me.dto.MeProfileResponse;
-import ru.ticketswap.me.dto.TwoFactorStatusResponse;
 import ru.ticketswap.me.dto.UpdateMeRequest;
 import ru.ticketswap.ticket.TicketLot;
 import ru.ticketswap.ticket.TicketRepository;
 import ru.ticketswap.ticket.TicketStatus;
 import ru.ticketswap.ticket.dto.TicketLotResponse;
-import ru.ticketswap.auth.TwoFactorService;
 import ru.ticketswap.user.User;
 import ru.ticketswap.user.UserIdentityService;
 import ru.ticketswap.user.UserRepository;
@@ -32,23 +29,20 @@ import java.util.stream.Collectors;
 public class MeController {
 
     private final UserRepository userRepository;
-    private final UserIdentityService userIdentityService;
     private final TicketRepository ticketRepository;
     private final ListingHoldRepository listingHoldRepository;
-    private final TwoFactorService twoFactorService;
+    private final UserIdentityService userIdentityService;
 
     public MeController(
             UserRepository userRepository,
-            UserIdentityService userIdentityService,
             TicketRepository ticketRepository,
             ListingHoldRepository listingHoldRepository,
-            TwoFactorService twoFactorService
+            UserIdentityService userIdentityService
     ) {
         this.userRepository = userRepository;
-        this.userIdentityService = userIdentityService;
         this.ticketRepository = ticketRepository;
         this.listingHoldRepository = listingHoldRepository;
-        this.twoFactorService = twoFactorService;
+        this.userIdentityService = userIdentityService;
     }
 
     @GetMapping
@@ -58,18 +52,22 @@ public class MeController {
     }
 
     @PatchMapping
-    public ResponseEntity<MeProfileResponse> updateProfile(@AuthenticationPrincipal UserDetails principal,
-                                                           @Valid @RequestBody UpdateMeRequest request) {
+    public ResponseEntity<MeProfileResponse> updateProfile(
+            @AuthenticationPrincipal UserDetails principal,
+            @Valid @RequestBody UpdateMeRequest request
+    ) {
         User user = requireUser(principal);
 
         if (request.login() != null && !request.login().isBlank()) {
-            userIdentityService.assertLoginAvailable(request.login(), user.getId());
-            user.setLogin(userIdentityService.normalizeLogin(request.login()));
+            String normalizedLogin = userIdentityService.normalizeLogin(request.login());
+            userIdentityService.assertLoginAvailable(normalizedLogin, user.getId());
+            user.setLogin(normalizedLogin);
         }
 
-        if (request.phoneNumber() != null) {
-            userIdentityService.assertPhoneAvailable(request.phoneNumber(), user.getId());
-            user.setPhoneNumber(userIdentityService.normalizePhone(request.phoneNumber()));
+        if (request.phoneNumber() != null && !request.phoneNumber().isBlank()) {
+            String normalizedPhone = userIdentityService.normalizePhone(request.phoneNumber());
+            userIdentityService.assertPhoneAvailable(normalizedPhone, user.getId());
+            user.setPhoneNumber(normalizedPhone);
         }
 
         userRepository.save(user);
@@ -77,8 +75,10 @@ public class MeController {
     }
 
     @GetMapping("/listings")
-    public ResponseEntity<List<TicketLotResponse>> myListings(@AuthenticationPrincipal UserDetails principal,
-                                                              @RequestParam(defaultValue = "active") String scope) {
+    public ResponseEntity<List<TicketLotResponse>> myListings(
+            @AuthenticationPrincipal UserDetails principal,
+            @RequestParam(defaultValue = "active") String scope
+    ) {
         User user = requireUser(principal);
 
         LocalDateTime now = LocalDateTime.now();
@@ -112,8 +112,10 @@ public class MeController {
     }
 
     @GetMapping("/purchases")
-    public ResponseEntity<List<TicketLotResponse>> myPurchases(@AuthenticationPrincipal UserDetails principal,
-                                                               @RequestParam(defaultValue = "active") String scope) {
+    public ResponseEntity<List<TicketLotResponse>> myPurchases(
+            @AuthenticationPrincipal UserDetails principal,
+            @RequestParam(defaultValue = "active") String scope
+    ) {
         User user = requireUser(principal);
 
         LocalDateTime now = LocalDateTime.now();
@@ -128,30 +130,11 @@ public class MeController {
         return ResponseEntity.ok(res);
     }
 
-    @PostMapping("/2fa/enable")
-    @Transactional
-    public ResponseEntity<TwoFactorStatusResponse> enableTwoFactor(@AuthenticationPrincipal UserDetails principal) {
-        User user = requireUser(principal);
-        user.setTwoFactorEnabled(true);
-        userRepository.save(user);
-        return ResponseEntity.ok(new TwoFactorStatusResponse(true));
-    }
-
-    @PostMapping("/2fa/disable")
-    @Transactional
-    public ResponseEntity<TwoFactorStatusResponse> disableTwoFactor(@AuthenticationPrincipal UserDetails principal) {
-        User user = requireUser(principal);
-        user.setTwoFactorEnabled(false);
-        userRepository.save(user);
-        twoFactorService.invalidateChallengesForUser(user.getId());
-        return ResponseEntity.ok(new TwoFactorStatusResponse(false));
-    }
-
     private User requireUser(UserDetails principal) {
         if (principal == null || principal.getUsername() == null) {
             throw new UnauthorizedException("Unauthorized");
         }
-        return userRepository.findByEmailIgnoreCase(principal.getUsername())
+        return userRepository.findByEmail(principal.getUsername())
                 .orElseThrow(() -> new UnauthorizedException("Unauthorized"));
     }
 
@@ -159,10 +142,10 @@ public class MeController {
         return new MeProfileResponse(
                 user.getId(),
                 user.getEmail(),
+                user.isEmailVerified(),
                 user.getLogin(),
                 user.getPhoneNumber(),
                 user.getRole(),
-                user.isTwoFactorEnabled(),
                 user.getCreatedAt()
         );
     }
