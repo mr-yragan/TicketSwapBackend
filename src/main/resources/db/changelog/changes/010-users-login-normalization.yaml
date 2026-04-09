@@ -1,0 +1,49 @@
+databaseChangeLog:
+  - changeSet:
+      id: 10-normalize-user-logins
+      author: nikolay
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - sqlCheck:
+            expectedResult: "0"
+            sql: |
+              SELECT COUNT(*)
+              FROM (
+                  SELECT btrim(login)
+                  FROM users
+                  WHERE login IS NOT NULL
+                  GROUP BY btrim(login)
+                  HAVING COUNT(*) > 1
+              ) duplicate_trimmed_logins
+        - sqlCheck:
+            expectedResult: "0"
+            sql: |
+              SELECT COUNT(*)
+              FROM users
+              WHERE login IS NOT NULL
+                AND btrim(login) = ''
+        - sqlCheck:
+            expectedResult: "0"
+            sql: |
+              SELECT COUNT(*)
+              FROM users
+              WHERE login IS NOT NULL
+                AND btrim(login) !~ '^[A-Za-z0-9_.-]{3,32}$'
+      changes:
+        - sql:
+            sql: |
+              UPDATE users
+              SET login = btrim(login)
+              WHERE login IS NOT NULL
+                AND login <> btrim(login);
+        - sql:
+            sql: |
+              ALTER TABLE users
+              ADD CONSTRAINT chk_users_login_trimmed
+              CHECK (login IS NULL OR login = btrim(login));
+        - sql:
+            sql: |
+              ALTER TABLE users
+              ADD CONSTRAINT chk_users_login_format
+              CHECK (login IS NULL OR login ~ '^[A-Za-z0-9_.-]{3,32}$');

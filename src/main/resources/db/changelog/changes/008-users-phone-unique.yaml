@@ -1,0 +1,24 @@
+databaseChangeLog:
+  - changeSet:
+      id: 8-add-users-phone-number-unique
+      author: nikolay
+      validCheckSum: ANY
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - sqlCheck:
+            expectedResult: "0"
+            sql: |
+              SELECT COUNT(*)
+              FROM (
+                  SELECT phone_number
+                  FROM users
+                  WHERE phone_number IS NOT NULL
+                  GROUP BY phone_number
+                  HAVING COUNT(*) > 1
+              ) duplicate_phone_numbers
+      changes:
+        - addUniqueConstraint:
+            tableName: users
+            columnNames: phone_number
+            constraintName: uq_users_phone_number

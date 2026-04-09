@@ -8,7 +8,8 @@ import java.time.Instant;
 @Table(
         name = "users",
         uniqueConstraints = {
-                @UniqueConstraint(columnNames = "email")
+                @UniqueConstraint(columnNames = "email"),
+                @UniqueConstraint(columnNames = "phone_number")
         }
 )
 public class User {
@@ -17,23 +18,26 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, unique = true, length = 255)
     private String email;
 
-    @Column(unique = true)
+    @Column(unique = true, length = 32)
     private String login;
 
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
-    @Column(name = "phone_number")
+    @Column(name = "phone_number", unique = true, length = 33)
     private String phoneNumber;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 50)
     private String role;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
+
+    @Column(name = "two_factor_enabled", nullable = false)
+    private boolean twoFactorEnabled;
 
     protected User() {
     }
@@ -72,6 +76,10 @@ public class User {
         return passwordHash;
     }
 
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
     public String getPhoneNumber() {
         return phoneNumber;
     }
@@ -86,5 +94,13 @@ public class User {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public boolean isTwoFactorEnabled() {
+        return twoFactorEnabled;
+    }
+
+    public void setTwoFactorEnabled(boolean twoFactorEnabled) {
+        this.twoFactorEnabled = twoFactorEnabled;
     }
 }
