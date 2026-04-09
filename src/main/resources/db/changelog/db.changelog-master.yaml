@@ -140,3 +140,7 @@ databaseChangeLog:
   - include:
       file: changes/012-password-reset-tokens.yaml
       relativeToChangelogFile: true
+
+  - include:
+      file: changes/013-users-phone-number-length.yaml
+      relativeToChangelogFile: true

@@ -11,7 +11,7 @@ public record UpdateMeRequest(
         )
         String login,
 
-        @Size(min = 5, max = 32, message = "phoneNumber must be between 5 and 32 characters")
+        @Size(min = 5, max = 64, message = "phoneNumber must be between 5 and 64 characters")
         @Pattern(regexp = "^[+0-9 ()-]+$", message = "phoneNumber has invalid characters")
         String phoneNumber
 ) {

@@ -27,7 +27,7 @@ public class User {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
-    @Column(name = "phone_number", unique = true, length = 32)
+    @Column(name = "phone_number", unique = true, length = 33)
     private String phoneNumber;
 
     @Column(nullable = false, length = 50)
