@@ -189,7 +189,7 @@ public class UserIdentityService {
         }
         if (users.size() > 1) {
             log.error("Multiple users found for {}", source);
-            throw new UsernameNotFoundException("User not found");
+            throw new DuplicateUserIdentityException(source);
         }
         return Optional.of(users.get(0));
     }
