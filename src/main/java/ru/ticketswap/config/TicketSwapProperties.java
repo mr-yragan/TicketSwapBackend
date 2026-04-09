@@ -153,6 +153,10 @@ public class TicketSwapProperties {
             @Min(1)
             private int presignedGetExpiryMinutes = 15;
 
+            private String publicEndpoint;
+
+            private String region = "us-east-1";
+
             private boolean autoCreateBucket = true;
 
             public String getEndpoint() {
@@ -193,6 +197,22 @@ public class TicketSwapProperties {
 
             public void setPresignedGetExpiryMinutes(int presignedGetExpiryMinutes) {
                 this.presignedGetExpiryMinutes = presignedGetExpiryMinutes;
+            }
+
+            public String getPublicEndpoint() {
+                return publicEndpoint;
+            }
+
+            public void setPublicEndpoint(String publicEndpoint) {
+                this.publicEndpoint = publicEndpoint;
+            }
+
+            public String getRegion() {
+                return region;
+            }
+
+            public void setRegion(String region) {
+                this.region = region;
             }
 
             public boolean isAutoCreateBucket() {

@@ -1,4 +1,5 @@
 databaseChangeLog:
+  - logicalFilePath: changes/009-users-identity-normalization.yaml
   - changeSet:
       id: 9-normalize-user-identifiers
       author: nikolay

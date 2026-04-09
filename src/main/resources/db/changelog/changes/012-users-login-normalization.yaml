@@ -1,4 +1,5 @@
 databaseChangeLog:
+  - logicalFilePath: changes/010-users-login-normalization.yaml
   - changeSet:
       id: 10-normalize-user-logins
       author: nikolay

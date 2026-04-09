@@ -1,4 +1,5 @@
 databaseChangeLog:
+  - logicalFilePath: changes/011-users-two-factor-and-challenges.yaml
   - changeSet:
       id: 011-add-users-two-factor-enabled
       author: nikolay

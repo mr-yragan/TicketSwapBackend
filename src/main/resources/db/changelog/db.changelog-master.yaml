@@ -122,25 +122,25 @@ databaseChangeLog:
       relativeToChangelogFile: true
 
   - include:
-      file: changes/008-users-phone-unique.yaml
+      file: changes/010-users-phone-unique.yaml
       relativeToChangelogFile: true
 
   - include:
-      file: changes/009-users-identity-normalization.yaml
+      file: changes/011-users-identity-normalization.yaml
       relativeToChangelogFile: true
 
   - include:
-      file: changes/010-users-login-normalization.yaml
+      file: changes/012-users-login-normalization.yaml
       relativeToChangelogFile: true
 
   - include:
-      file: changes/011-users-two-factor-and-challenges.yaml
+      file: changes/013-users-two-factor-and-challenges.yaml
       relativeToChangelogFile: true
 
   - include:
-      file: changes/012-password-reset-tokens.yaml
+      file: changes/014-password-reset-tokens.yaml
       relativeToChangelogFile: true
 
   - include:
-      file: changes/013-users-phone-number-length.yaml
+      file: changes/015-users-phone-number-length.yaml
       relativeToChangelogFile: true

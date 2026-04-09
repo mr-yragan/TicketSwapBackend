@@ -43,6 +43,7 @@ services:
       TICKETSWAP_STORAGE_S3_ACCESS_KEY: minioadmin
       TICKETSWAP_STORAGE_S3_SECRET_KEY: minioadmin123
       TICKETSWAP_STORAGE_S3_BUCKET: ticketswap-ticket-files
+      TICKETSWAP_STORAGE_S3_PUBLIC_ENDPOINT: http://localhost:9000
     ports:
       - "8080:8080"
 

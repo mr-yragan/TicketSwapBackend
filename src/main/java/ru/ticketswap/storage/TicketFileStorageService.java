@@ -5,6 +5,7 @@ import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 import io.minio.http.Method;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import ru.ticketswap.common.BusinessRuleException;
@@ -38,15 +39,18 @@ public class TicketFileStorageService {
     private static final List<String> ALLOWED_EXTENSIONS = List.of(".pdf", ".png", ".jpg", ".jpeg");
 
     private final MinioClient minioClient;
+    private final MinioClient presignMinioClient;
     private final TicketFileRepository ticketFileRepository;
     private final TicketSwapProperties.Storage.S3 properties;
 
     public TicketFileStorageService(
-            MinioClient minioClient,
+            @Qualifier("internalMinioClient") MinioClient minioClient,
+            @Qualifier("publicPresignMinioClient") MinioClient presignMinioClient,
             TicketFileRepository ticketFileRepository,
             TicketSwapProperties ticketSwapProperties
     ) {
         this.minioClient = minioClient;
+        this.presignMinioClient = presignMinioClient;
         this.ticketFileRepository = ticketFileRepository;
         this.properties = ticketSwapProperties.getStorage().getS3();
     }
@@ -141,7 +145,7 @@ public class TicketFileStorageService {
 
     private TicketFileDownloadUrlResponse createDownloadUrl(TicketFile ticketFile) {
         try {
-            String url = minioClient.getPresignedObjectUrl(
+            String generatedUrl = presignMinioClient.getPresignedObjectUrl(
                     GetPresignedObjectUrlArgs.builder()
                             .method(Method.GET)
                             .bucket(properties.getBucket())
@@ -153,7 +157,7 @@ public class TicketFileStorageService {
             Instant expiresAt = Instant.now().plusSeconds(properties.getPresignedGetExpiryMinutes() * 60L);
             return new TicketFileDownloadUrlResponse(
                     ticketFile.getId(),
-                    url,
+                    generatedUrl,
                     expiresAt,
                     ticketFile.getOriginalName(),
                     ticketFile.getContentType(),
