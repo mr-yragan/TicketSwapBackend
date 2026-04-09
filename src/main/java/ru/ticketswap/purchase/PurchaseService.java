@@ -12,6 +12,7 @@ import ru.ticketswap.hold.ListingHoldRepository;
 import ru.ticketswap.ticket.TicketLot;
 import ru.ticketswap.ticket.TicketRepository;
 import ru.ticketswap.ticket.TicketStatus;
+import ru.ticketswap.ticket.history.ListingStatusHistoryService;
 import ru.ticketswap.user.User;
 
 import java.time.Instant;
@@ -28,15 +29,18 @@ public class PurchaseService {
     private final TicketRepository ticketRepository;
     private final ListingHoldRepository listingHoldRepository;
     private final TransactionTemplate tx;
+    private final ListingStatusHistoryService listingStatusHistoryService;
 
     public PurchaseService(
             TicketRepository ticketRepository,
             ListingHoldRepository listingHoldRepository,
-            PlatformTransactionManager transactionManager
+            PlatformTransactionManager transactionManager,
+            ListingStatusHistoryService listingStatusHistoryService
     ) {
         this.ticketRepository = ticketRepository;
         this.listingHoldRepository = listingHoldRepository;
         this.tx = new TransactionTemplate(transactionManager);
+        this.listingStatusHistoryService = listingStatusHistoryService;
     }
 
     public ListingHold createHold(Long listingId, User buyer) {
@@ -123,8 +127,7 @@ public class PurchaseService {
         }
 
         listing.setBuyer(buyer);
-        listing.setStatus(TicketStatus.PROCESSING);
-        ticketRepository.save(listing);
+        listingStatusHistoryService.transition(listing, TicketStatus.PROCESSING, "Purchase started", buyer);
     }
 
     private TicketLot completePurchaseTx(Long listingId, User buyer) {
@@ -146,8 +149,7 @@ public class PurchaseService {
             listing.setBuyer(buyer);
         }
 
-        listing.setStatus(TicketStatus.COMPLETED);
-        TicketLot saved = ticketRepository.saveAndFlush(listing);
+        TicketLot saved = listingStatusHistoryService.transition(listing, TicketStatus.COMPLETED, "Purchase completed", buyer);
 
         listingHoldRepository.deleteByListingId(listingId);
 

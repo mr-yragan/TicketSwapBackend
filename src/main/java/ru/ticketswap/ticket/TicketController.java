@@ -16,8 +16,10 @@ import ru.ticketswap.hold.ListingHoldRepository;
 import ru.ticketswap.hold.dto.ListingHoldResponse;
 import ru.ticketswap.purchase.PurchaseService;
 import ru.ticketswap.storage.TicketFileStorageService;
+import ru.ticketswap.ticket.history.ListingStatusHistoryService;
 import ru.ticketswap.ticket.dto.CreateTicketRequest;
 import ru.ticketswap.ticket.dto.ListingDetailsResponse;
+import ru.ticketswap.ticket.dto.ListingStatusHistoryResponse;
 import ru.ticketswap.ticket.dto.ListingViewResponse;
 import ru.ticketswap.ticket.dto.TicketFileDownloadUrlResponse;
 import ru.ticketswap.ticket.dto.TicketFilesResponse;
@@ -44,6 +46,7 @@ public class TicketController {
     private final PurchaseService purchaseService;
     private final ListingLifecycleService listingLifecycleService;
     private final TicketFileStorageService ticketFileStorageService;
+    private final ListingStatusHistoryService listingStatusHistoryService;
 
     public TicketController(
             TicketRepository ticketRepository,
@@ -51,7 +54,8 @@ public class TicketController {
             ListingHoldRepository listingHoldRepository,
             PurchaseService purchaseService,
             ListingLifecycleService listingLifecycleService,
-            TicketFileStorageService ticketFileStorageService
+            TicketFileStorageService ticketFileStorageService,
+            ListingStatusHistoryService listingStatusHistoryService
     ) {
         this.ticketRepository = ticketRepository;
         this.userRepository = userRepository;
@@ -59,6 +63,7 @@ public class TicketController {
         this.purchaseService = purchaseService;
         this.listingLifecycleService = listingLifecycleService;
         this.ticketFileStorageService = ticketFileStorageService;
+        this.listingStatusHistoryService = listingStatusHistoryService;
     }
 
     @GetMapping
@@ -99,6 +104,25 @@ public class TicketController {
                 ticket.getStatus(),
                 hold
         );
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/status-history")
+    public ResponseEntity<List<ListingStatusHistoryResponse>> getStatusHistory(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        TicketLot ticket = loadTicket(id);
+        User currentUser = tryLoadUser(userDetails);
+
+        if (!isVisibleForPublic(ticket) && !isSeller(ticket, currentUser)) {
+            throw new NotFoundException("Ticket not found");
+        }
+
+        List<ListingStatusHistoryResponse> response = listingStatusHistoryService.getHistory(id).stream()
+                .map(ListingStatusHistoryResponse::fromEntity)
+                .toList();
 
         return ResponseEntity.ok(response);
     }
@@ -156,15 +180,18 @@ public class TicketController {
 
         applyEditableFields(ticket, request, newVenueParts);
 
+        TicketLot saved;
         if (requiresRevalidation) {
             ticket.setBuyer(null);
-            ticket.setStatus(TicketStatus.CREATED);
-        }
-
-        TicketLot saved = ticketRepository.saveAndFlush(ticket);
-
-        if (requiresRevalidation) {
+            saved = listingStatusHistoryService.transition(
+                    ticket,
+                    TicketStatus.CREATED,
+                    "Listing edited and sent for revalidation",
+                    seller
+            );
             listingLifecycleService.onListingCreated(saved.getId());
+        } else {
+            saved = ticketRepository.saveAndFlush(ticket);
         }
 
         return ResponseEntity.ok(toDetailsResponse(saved));
@@ -184,8 +211,7 @@ public class TicketController {
         listingHoldRepository.flush();
 
         ticket.setBuyer(null);
-        ticket.setStatus(TicketStatus.FAILED);
-        ticketRepository.saveAndFlush(ticket);
+        listingStatusHistoryService.transition(ticket, TicketStatus.FAILED, "Listing cancelled by seller", seller);
 
         return ResponseEntity.noContent().build();
     }
@@ -354,7 +380,7 @@ public class TicketController {
                 seller
         );
 
-        return ticketRepository.saveAndFlush(ticket);
+        return listingStatusHistoryService.createListingWithInitialStatus(ticket, "Listing created", seller);
     }
 
     private TicketLot loadTicket(Long id) {

@@ -1,0 +1,68 @@
+databaseChangeLog:
+  - changeSet:
+      id: 017-create-listing-status-history
+      author: vanya
+      changes:
+        - createTable:
+            tableName: listing_status_history
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: listing_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: from_status
+                  type: varchar(50)
+              - column:
+                  name: to_status
+                  type: varchar(50)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: reason
+                  type: varchar(255)
+              - column:
+                  name: changed_by_user_id
+                  type: bigint
+                  constraints:
+                    nullable: true
+              - column:
+                  name: changed_at
+                  type: timestamp with time zone
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: listing_status_history
+            indexName: idx_listing_status_history_listing_id
+            columns:
+              - column:
+                  name: listing_id
+        - createIndex:
+            tableName: listing_status_history
+            indexName: idx_listing_status_history_changed_at
+            columns:
+              - column:
+                  name: changed_at
+        - addForeignKeyConstraint:
+            baseTableName: listing_status_history
+            baseColumnNames: listing_id
+            referencedTableName: tickets
+            referencedColumnNames: id
+            constraintName: fk_listing_status_history_listing_cascade
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: listing_status_history
+            baseColumnNames: changed_by_user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_listing_status_history_changed_by_user
+            onDelete: SET NULL

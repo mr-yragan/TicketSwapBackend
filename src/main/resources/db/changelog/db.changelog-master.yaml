@@ -135,3 +135,6 @@ databaseChangeLog:
   - include:
       file: changes/016-users-email-verification.yaml
       relativeToChangelogFile: true
+  - include:
+      file: changes/017-listing-status-history.yaml
+      relativeToChangelogFile: true

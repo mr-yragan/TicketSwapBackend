@@ -4,6 +4,7 @@ import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import ru.ticketswap.ticket.history.ListingStatusHistoryService;
 
 import java.time.LocalDateTime;
 import java.util.concurrent.Executors;
@@ -20,12 +21,18 @@ public class ListingLifecycleService {
 
     private final TicketRepository ticketRepository;
     private final TransactionTemplate tx;
+    private final ListingStatusHistoryService listingStatusHistoryService;
 
     private final ScheduledExecutorService scheduler;
 
-    public ListingLifecycleService(TicketRepository ticketRepository, PlatformTransactionManager transactionManager) {
+    public ListingLifecycleService(
+            TicketRepository ticketRepository,
+            PlatformTransactionManager transactionManager,
+            ListingStatusHistoryService listingStatusHistoryService
+    ) {
         this.ticketRepository = ticketRepository;
         this.tx = new TransactionTemplate(transactionManager);
+        this.listingStatusHistoryService = listingStatusHistoryService;
 
         ThreadFactory factory = r -> {
             Thread t = new Thread(r);
@@ -67,13 +74,11 @@ public class ListingLifecycleService {
 
         LocalDateTime now = LocalDateTime.now();
         if (lot.getEventDate() != null && lot.getEventDate().isBefore(now)) {
-            lot.setStatus(TicketStatus.FAILED);
-            ticketRepository.save(lot);
+            listingStatusHistoryService.transition(lot, TicketStatus.FAILED, "Validation failed: event date is in the past", null);
             return;
         }
 
-        lot.setStatus(TicketStatus.PENDING_VALIDATION);
-        ticketRepository.save(lot);
+        listingStatusHistoryService.transition(lot, TicketStatus.PENDING_VALIDATION, "Validation started", null);
     }
 
     private void finalizeValidation(Long listingId) {
@@ -86,8 +91,7 @@ public class ListingLifecycleService {
             return;
         }
 
-        lot.setStatus(TicketStatus.PENDING_RECIPIENT);
-        ticketRepository.save(lot);
+        listingStatusHistoryService.transition(lot, TicketStatus.PENDING_RECIPIENT, "Validation completed successfully", null);
     }
 
     @PreDestroy
