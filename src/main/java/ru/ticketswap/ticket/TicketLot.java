@@ -105,44 +105,88 @@ public class TicketLot {
         return uid;
     }
 
+    public void setUid(String uid) {
+        this.uid = uid;
+    }
+
     public String getEventName() {
         return eventName;
+    }
+
+    public void setEventName(String eventName) {
+        this.eventName = eventName;
     }
 
     public LocalDateTime getEventDate() {
         return eventDate;
     }
 
+    public void setEventDate(LocalDateTime eventDate) {
+        this.eventDate = eventDate;
+    }
+
     public String getVenueName() {
         return venueName;
+    }
+
+    public void setVenueName(String venueName) {
+        this.venueName = venueName;
     }
 
     public String getVenueCity() {
         return venueCity;
     }
 
+    public void setVenueCity(String venueCity) {
+        this.venueCity = venueCity;
+    }
+
     public String getAdditionalInfo() {
         return additionalInfo;
+    }
+
+    public void setAdditionalInfo(String additionalInfo) {
+        this.additionalInfo = additionalInfo;
     }
 
     public String getOrganizerName() {
         return organizerName;
     }
 
+    public void setOrganizerName(String organizerName) {
+        this.organizerName = organizerName;
+    }
+
     public String getSellerComment() {
         return sellerComment;
+    }
+
+    public void setSellerComment(String sellerComment) {
+        this.sellerComment = sellerComment;
     }
 
     public BigDecimal getOriginalPrice() {
         return originalPrice;
     }
 
+    public void setOriginalPrice(BigDecimal originalPrice) {
+        this.originalPrice = originalPrice;
+    }
+
     public BigDecimal getResalePrice() {
         return resalePrice;
     }
 
+    public void setResalePrice(BigDecimal resalePrice) {
+        this.resalePrice = resalePrice;
+    }
+
     public TicketStatus getStatus() {
         return status;
+    }
+
+    public void setStatus(TicketStatus status) {
+        this.status = status;
     }
 
     public User getSeller() {
@@ -155,10 +199,6 @@ public class TicketLot {
 
     public void setBuyer(User buyer) {
         this.buyer = buyer;
-    }
-
-    public void setStatus(TicketStatus status) {
-        this.status = status;
     }
 
     public List<TicketFile> getTicketFiles() {

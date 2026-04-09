@@ -78,8 +78,16 @@ public class TicketController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ListingViewResponse> getListing(@PathVariable("id") Long id) {
+    public ResponseEntity<ListingViewResponse> getListing(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
         TicketLot ticket = loadTicket(id);
+        User currentUser = tryLoadUser(userDetails);
+
+        if (!isVisibleForPublic(ticket) && !isSeller(ticket, currentUser)) {
+            throw new NotFoundException("Ticket not found");
+        }
 
         Optional<ListingHold> activeHold = listingHoldRepository.findByListingIdAndHoldUntilAfter(id, Instant.now());
         ListingViewResponse.Hold hold = activeHold
@@ -122,6 +130,7 @@ public class TicketController {
                 ticketFileStorageService.uploadTicketFiles(saved, files);
                 saved = loadTicket(saved.getId());
             }
+
             listingLifecycleService.onListingCreated(saved.getId());
             return ResponseEntity.status(HttpStatus.CREATED).body(toDetailsResponse(saved));
         } catch (RuntimeException ex) {
@@ -129,6 +138,56 @@ public class TicketController {
             ticketRepository.deleteById(saved.getId());
             throw ex;
         }
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<ListingDetailsResponse> updateListing(
+            @PathVariable("id") Long id,
+            @Valid @RequestBody CreateTicketRequest request,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        User seller = requireUser(userDetails);
+        TicketLot ticket = loadTicket(id);
+
+        ensureSellerCanModifyListing(ticket, seller);
+
+        VenueParts newVenueParts = parseVenueParts(request.venue());
+        boolean requiresRevalidation = requiresRevalidation(ticket, request, newVenueParts);
+
+        applyEditableFields(ticket, request, newVenueParts);
+
+        if (requiresRevalidation) {
+            ticket.setBuyer(null);
+            ticket.setStatus(TicketStatus.CREATED);
+        }
+
+        TicketLot saved = ticketRepository.saveAndFlush(ticket);
+
+        if (requiresRevalidation) {
+            listingLifecycleService.onListingCreated(saved.getId());
+        }
+
+        return ResponseEntity.ok(toDetailsResponse(saved));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> cancelListing(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        User seller = requireUser(userDetails);
+        TicketLot ticket = loadTicket(id);
+
+        ensureSellerCanModifyListing(ticket, seller);
+
+        listingHoldRepository.deleteByListingId(id);
+        listingHoldRepository.flush();
+
+        ticket.setBuyer(null);
+        ticket.setStatus(TicketStatus.FAILED);
+        ticketRepository.saveAndFlush(ticket);
+
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping(value = "/{id}/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -235,9 +294,7 @@ public class TicketController {
             @AuthenticationPrincipal UserDetails userDetails
     ) {
         User buyer = requireUser(userDetails);
-
         ListingHold hold = purchaseService.createHold(id, buyer);
-
         TicketLot listing = loadTicket(id);
 
         ListingHoldResponse response = new ListingHoldResponse(
@@ -273,9 +330,11 @@ public class TicketController {
     @GetMapping("/my")
     public ResponseEntity<List<TicketLotResponse>> myTickets(@AuthenticationPrincipal UserDetails userDetails) {
         User user = requireUser(userDetails);
+
         List<TicketLotResponse> response = ticketRepository.findAllBySellerIdOrderByCreatedAtDesc(user.getId()).stream()
                 .map(this::toTicketLotResponse)
                 .toList();
+
         return ResponseEntity.ok(response);
     }
 
@@ -307,25 +366,52 @@ public class TicketController {
         if (principal == null || principal.getUsername() == null) {
             throw new UnauthorizedException("Unauthorized");
         }
+
         return userRepository.findByEmailIgnoreCase(principal.getUsername())
                 .orElseThrow(() -> new UnauthorizedException("Unauthorized"));
     }
 
-    private void ensureSellerCanModifyFile(TicketLot ticket, User seller) {
-        if (ticket.getSeller() == null || ticket.getSeller().getId() == null || !ticket.getSeller().getId().equals(seller.getId())) {
-            throw new UnauthorizedException("You can modify only your own ticket files");
+    private User tryLoadUser(UserDetails principal) {
+        if (principal == null || principal.getUsername() == null) {
+            return null;
         }
+        return userRepository.findByEmailIgnoreCase(principal.getUsername()).orElse(null);
+    }
+
+    private void ensureSellerCanModifyListing(TicketLot ticket, User seller) {
+        ensureSellerOwnsTicket(ticket, seller);
+
+        if (ticket.getStatus() == TicketStatus.PROCESSING || ticket.getStatus() == TicketStatus.COMPLETED) {
+            throw new BusinessRuleException("Listing cannot be changed after purchase has started");
+        }
+
+        if (hasActiveHold(ticket.getId())) {
+            throw new BusinessRuleException("Listing cannot be changed while it is reserved by a buyer");
+        }
+    }
+
+    private void ensureSellerCanModifyFile(TicketLot ticket, User seller) {
+        ensureSellerOwnsTicket(ticket, seller);
+
         if (ticket.getStatus() == TicketStatus.PROCESSING || ticket.getStatus() == TicketStatus.COMPLETED) {
             throw new BusinessRuleException("Ticket files cannot be changed after purchase has started");
+        }
+
+        if (hasActiveHold(ticket.getId())) {
+            throw new BusinessRuleException("Ticket files cannot be changed while the listing is reserved by a buyer");
+        }
+    }
+
+    private void ensureSellerOwnsTicket(TicketLot ticket, User seller) {
+        if (ticket.getSeller() == null || ticket.getSeller().getId() == null || !ticket.getSeller().getId().equals(seller.getId())) {
+            throw new UnauthorizedException("You can modify only your own listings");
         }
     }
 
     private void ensureCanReadTicketFiles(TicketLot ticket, User currentUser) {
-        boolean isSeller = ticket.getSeller() != null
-                && ticket.getSeller().getId() != null
-                && ticket.getSeller().getId().equals(currentUser.getId());
-
-        boolean isCompletedBuyer = ticket.getStatus() == TicketStatus.COMPLETED
+        boolean isSeller = isSeller(ticket, currentUser);
+        boolean isCompletedBuyer = currentUser != null
+                && ticket.getStatus() == TicketStatus.COMPLETED
                 && ticket.getBuyer() != null
                 && ticket.getBuyer().getId() != null
                 && ticket.getBuyer().getId().equals(currentUser.getId());
@@ -333,6 +419,57 @@ public class TicketController {
         if (!isSeller && !isCompletedBuyer) {
             throw new UnauthorizedException("You do not have access to these ticket files");
         }
+    }
+
+    private boolean isSeller(TicketLot ticket, User currentUser) {
+        return currentUser != null
+                && ticket.getSeller() != null
+                && ticket.getSeller().getId() != null
+                && ticket.getSeller().getId().equals(currentUser.getId());
+    }
+
+    private boolean isVisibleForPublic(TicketLot ticket) {
+        return ticket.getStatus() == TicketStatus.PENDING_RECIPIENT
+                || ticket.getStatus() == TicketStatus.PROCESSING
+                || ticket.getStatus() == TicketStatus.COMPLETED;
+    }
+
+    private boolean hasActiveHold(Long listingId) {
+        return listingHoldRepository.findByListingIdAndHoldUntilAfter(listingId, Instant.now()).isPresent();
+    }
+
+    private boolean requiresRevalidation(TicketLot ticket, CreateTicketRequest request, VenueParts newVenueParts) {
+        if (ticket.getStatus() == TicketStatus.FAILED
+                || ticket.getStatus() == TicketStatus.CREATED
+                || ticket.getStatus() == TicketStatus.PENDING_VALIDATION) {
+            return true;
+        }
+
+        return !safeEquals(ticket.getUid(), request.uid())
+                || !safeEquals(ticket.getEventName(), request.eventName())
+                || !safeEquals(ticket.getEventDate(), request.eventDate())
+                || !safeEquals(ticket.getVenueName(), newVenueParts.venueName())
+                || !safeEquals(ticket.getVenueCity(), newVenueParts.venueCity());
+    }
+
+    private void applyEditableFields(TicketLot ticket, CreateTicketRequest request, VenueParts venueParts) {
+        ticket.setUid(request.uid());
+        ticket.setEventName(request.eventName());
+        ticket.setEventDate(request.eventDate());
+        ticket.setVenueName(venueParts.venueName());
+        ticket.setVenueCity(venueParts.venueCity());
+        ticket.setAdditionalInfo(request.additionalInfo());
+        ticket.setOrganizerName(request.organizerName());
+        ticket.setSellerComment(request.sellerComment());
+        ticket.setOriginalPrice(request.price());
+        ticket.setResalePrice(request.price());
+    }
+
+    private boolean safeEquals(Object left, Object right) {
+        if (left == null) {
+            return right == null;
+        }
+        return left.equals(right);
     }
 
     private TicketLotResponse toTicketLotResponse(TicketLot ticket) {
@@ -374,6 +511,7 @@ public class TicketController {
 
     private List<MultipartFile> collectFiles(List<MultipartFile> ticketFiles, MultipartFile singleTicketFile) {
         List<MultipartFile> files = new ArrayList<>();
+
         if (ticketFiles != null) {
             for (MultipartFile file : ticketFiles) {
                 if (file != null && !file.isEmpty()) {
@@ -381,9 +519,11 @@ public class TicketController {
                 }
             }
         }
+
         if (singleTicketFile != null && !singleTicketFile.isEmpty()) {
             files.add(singleTicketFile);
         }
+
         return files;
     }
 
@@ -404,14 +544,17 @@ public class TicketController {
         if (venueLine == null) {
             return new VenueParts("", "");
         }
+
         String trimmed = venueLine.trim();
         if (trimmed.isEmpty()) {
             return new VenueParts("", "");
         }
+
         int comma = trimmed.indexOf(',');
         if (comma < 0) {
             return new VenueParts(trimmed, "");
         }
+
         String name = trimmed.substring(0, comma).trim();
         String city = trimmed.substring(comma + 1).trim();
         return new VenueParts(name, city);
@@ -420,6 +563,7 @@ public class TicketController {
     private String formatVenue(String venueName, String venueCity) {
         String name = venueName == null ? "" : venueName.trim();
         String city = venueCity == null ? "" : venueCity.trim();
+
         if (name.isEmpty() && city.isEmpty()) {
             return "";
         }
