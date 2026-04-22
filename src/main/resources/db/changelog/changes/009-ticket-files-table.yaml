@@ -1,0 +1,87 @@
+databaseChangeLog:
+  - changeSet:
+      id: 9-create-ticket-files-table
+      author: vanya
+      changes:
+        - createTable:
+            tableName: ticket_files
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: ticket_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_ticket_files_ticket
+                    references: tickets(id)
+              - column:
+                  name: object_key
+                  type: varchar(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: original_name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: content_type
+                  type: varchar(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: size_bytes
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: ticket_files
+            indexName: idx_ticket_files_ticket_id
+            columns:
+              - column:
+                  name: ticket_id
+        - addUniqueConstraint:
+            tableName: ticket_files
+            columnNames: object_key
+            constraintName: uq_ticket_files_object_key
+        - sql:
+            dbms: postgresql
+            splitStatements: true
+            stripComments: true
+            sql: |
+              INSERT INTO ticket_files (ticket_id, object_key, original_name, content_type, size_bytes, created_at)
+              SELECT id,
+                     ticket_file_object_key,
+                     COALESCE(NULLIF(ticket_file_original_name, ''), 'ticket-file'),
+                     COALESCE(NULLIF(ticket_file_content_type, ''), 'application/octet-stream'),
+                     COALESCE(ticket_file_size_bytes, 0),
+                     created_at
+              FROM tickets
+              WHERE ticket_file_object_key IS NOT NULL
+                AND ticket_file_object_key <> '';
+        - sql:
+            dbms: postgresql
+            splitStatements: true
+            stripComments: true
+            sql: |
+              UPDATE tickets
+              SET ticket_file_object_key = NULL,
+                  ticket_file_original_name = NULL,
+                  ticket_file_content_type = NULL,
+                  ticket_file_size_bytes = NULL
+              WHERE ticket_file_object_key IS NOT NULL
+                OR ticket_file_original_name IS NOT NULL
+                OR ticket_file_content_type IS NOT NULL
+                OR ticket_file_size_bytes IS NOT NULL;

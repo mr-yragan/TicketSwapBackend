@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - logicalFilePath: changes/013-users-phone-number-length.yaml
+  - changeSet:
+      id: 014-widen-users-phone-number-column
+      author: vanya
+      changes:
+        - modifyDataType:
+            tableName: users
+            columnName: phone_number
+            newDataType: varchar(33)

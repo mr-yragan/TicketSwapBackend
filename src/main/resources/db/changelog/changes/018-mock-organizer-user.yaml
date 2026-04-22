@@ -1,0 +1,40 @@
+databaseChangeLog:
+  - logicalFilePath: changes/018-mock-organizer-user.yaml
+
+  - changeSet:
+      id: 018-insert-mock-organizer-user
+      author: nikolay
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - sqlCheck:
+            expectedResult: "0"
+            sql: |
+              SELECT COUNT(*)
+              FROM users
+              WHERE email = 'ticketswap_organizer@yandex.ru'
+      changes:
+        - insert:
+            tableName: users
+            columns:
+              - column:
+                  name: email
+                  value: ticketswap_organizer@yandex.ru
+              - column:
+                  name: login
+                  value: organizer_mock
+              - column:
+                  name: password_hash
+                  value: $2a$10$oJAFHPCSl8LpJgy1fAM6IOg/hd4py3oq5Flv7jajZLJfsrjPOsg96
+              - column:
+                  name: role
+                  value: ORGANIZER
+              - column:
+                  name: email_verified
+                  valueBoolean: true
+              - column:
+                  name: two_factor_enabled
+                  valueBoolean: false
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP

@@ -1,0 +1,62 @@
+databaseChangeLog:
+  - changeSet:
+      id: 4-add-user-profile-columns
+      author: vanya
+      changes:
+        - addColumn:
+            tableName: users
+            columns:
+              - column:
+                  name: login
+                  type: varchar(32)
+              - column:
+                  name: phone_number
+                  type: varchar(32)
+        - addUniqueConstraint:
+            tableName: users
+            columnNames: login
+            constraintName: uq_users_login
+
+  - changeSet:
+      id: 5-create-listing-holds
+      author: vanya
+      changes:
+        - createTable:
+            tableName: listing_holds
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: listing_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_listing_holds_listing
+                    references: tickets(id)
+              - column:
+                  name: buyer_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_listing_holds_buyer
+                    references: users(id)
+              - column:
+                  name: hold_until
+                  type: timestamp
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: listing_holds
+            columnNames: listing_id
+            constraintName: uq_listing_holds_listing

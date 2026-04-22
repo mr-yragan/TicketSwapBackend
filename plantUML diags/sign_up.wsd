@@ -1,0 +1,23 @@
+@startuml
+title Процесс регистрации пользователя
+
+actor user
+participant frontend
+participant backend
+
+user -> frontend: зайти на сайт, регистрация \n(открыть браузер)
+frontend --> user: показать форму регистрации
+user -> frontend: заполнить форму (email, пароль, имя и т.п.) \nнажать "Зарегистрироваться"
+frontend -> backend: POST /auth/register {регистрационные_данные}
+
+alt Успешная регистрация
+    backend -> backend: проверить уникальность email; \nсоздать пользователя в БД
+    backend --> frontend: 201 Created {userId, userInfo}
+    frontend --> user: показать сообщение об успешной регистрации \nпредложить войти в систему
+else Пользователь уже зарегистрирован или данные некорректны
+    backend -> backend: проверить уникальность email \nи валидность данных
+    backend --> frontend: 400/409 {error="Пользователь уже зарегистрирован" \nили "Некорректные данные"}
+    frontend --> user: показать сообщение об ошибке \n(подсветить проблемные поля)
+end
+
+@enduml

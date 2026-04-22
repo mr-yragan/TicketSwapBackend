@@ -1,0 +1,143 @@
+databaseChangeLog:
+  - changeSet:
+      id: 1-create-users-table
+      author: nikolay
+      changes:
+        - createTable:
+            tableName: users
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: email
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: password_hash
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: role
+                  type: varchar(50)
+                  defaultValue: "USER"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 2-create-tickets-table
+      author: nikolay
+      changes:
+        - createTable:
+            tableName: tickets
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: uid
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: event_name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: event_date
+                  type: datetime
+                  constraints:
+                    nullable: false
+              - column:
+                  name: original_price
+                  type: decimal(19, 2)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: resale_price
+                  type: decimal(19, 2)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: varchar(50)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: seller_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_tickets_seller
+                    references: users(id)
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+  - include:
+      file: changes/003-tickets-constraints.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/004-user-profile-and-holds.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/005-tickets-add-ui-fields.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/006-listing-holds-timestamptz.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/007-tickets-add-buyer.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/008-tickets-add-file-storage.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/009-ticket-files-table.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/010-users-phone-unique.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/011-users-identity-normalization.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/012-users-login-normalization.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/013-users-two-factor-and-challenges.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/014-password-reset-tokens.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/015-users-phone-number-length.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/016-users-email-verification.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/017-listing-status-history.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/018-mock-organizer-user.yaml
+      relativeToChangelogFile: true

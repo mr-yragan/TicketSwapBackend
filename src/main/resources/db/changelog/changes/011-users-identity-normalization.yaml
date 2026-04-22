@@ -1,0 +1,69 @@
+databaseChangeLog:
+  - logicalFilePath: changes/009-users-identity-normalization.yaml
+  - changeSet:
+      id: 9-normalize-user-identifiers
+      author: nikolay
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - sqlCheck:
+            expectedResult: "0"
+            sql: |
+              SELECT COUNT(*)
+              FROM (
+                  SELECT lower(btrim(email))
+                  FROM users
+                  GROUP BY lower(btrim(email))
+                  HAVING COUNT(*) > 1
+              ) duplicate_normalized_emails
+        - sqlCheck:
+            expectedResult: "0"
+            sql: |
+              SELECT COUNT(*)
+              FROM (
+                  SELECT '+' || regexp_replace(phone_number, '\D', '', 'g')
+                  FROM users
+                  WHERE phone_number IS NOT NULL
+                  GROUP BY '+' || regexp_replace(phone_number, '\D', '', 'g')
+                  HAVING COUNT(*) > 1
+              ) duplicate_normalized_phone_numbers
+        - sqlCheck:
+            expectedResult: "0"
+            sql: |
+              SELECT COUNT(*)
+              FROM users
+              WHERE phone_number IS NOT NULL
+                AND length(regexp_replace(phone_number, '\D', '', 'g')) NOT BETWEEN 5 AND 32
+        - sqlCheck:
+            expectedResult: "0"
+            sql: |
+              SELECT COUNT(*)
+              FROM users
+              WHERE login IS NOT NULL
+                AND login ~ '^[0-9 ()+-]{5,32}$'
+      changes:
+        - sql:
+            sql: |
+              UPDATE users
+              SET email = lower(btrim(email))
+              WHERE email <> lower(btrim(email));
+        - sql:
+            sql: |
+              UPDATE users
+              SET phone_number = '+' || regexp_replace(phone_number, '\D', '', 'g')
+              WHERE phone_number IS NOT NULL;
+        - sql:
+            sql: |
+              ALTER TABLE users
+              ADD CONSTRAINT chk_users_email_normalized
+              CHECK (email = lower(btrim(email)));
+        - sql:
+            sql: |
+              ALTER TABLE users
+              ADD CONSTRAINT chk_users_phone_number_normalized
+              CHECK (phone_number IS NULL OR phone_number ~ '^\+[0-9]{5,32}$');
+        - sql:
+            sql: |
+              ALTER TABLE users
+              ADD CONSTRAINT chk_users_login_not_phone_like
+              CHECK (login IS NULL OR login !~ '^[0-9 ()+-]{5,32}$');

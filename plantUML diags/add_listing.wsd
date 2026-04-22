@@ -1,0 +1,26 @@
+@startuml
+title Размещение заявки на продажу билета
+
+actor user
+participant frontend
+participant backend
+participant organizerSystem
+
+user -> frontend: открыть страницу "Продать билет"
+frontend --> user: показать форму продажи билета
+user -> frontend: ввести данные билета / загрузить PDF \nуказать цену, условия продажи
+frontend -> backend: POST /listings {ticketData, price}
+backend -> organizerSystem: POST /organizer-api/tickets/verify \n{ticketData}
+
+alt Билет прошёл проверку
+    organizerSystem --> backend: 200 OK {status="VALID", eventId}
+    backend -> backend: создать заявку на продажу \nсохранить listing в БД
+    backend --> frontend: 201 Created {listingId, status="ACTIVE"}
+    frontend --> user: показать экран "Заявка размещена" \nс данными по билету и цене
+else Билет недействителен или отклонён
+    organizerSystem --> backend: 200 OK {status="INVALID"} \nили 4xx/5xx ошибка
+    backend --> frontend: 400 Bad Request \n{error="Билет недействителен или уже использован"}
+    frontend --> user: показать сообщение об ошибке \nи предложить проверить данные билета
+end
+
+@enduml
