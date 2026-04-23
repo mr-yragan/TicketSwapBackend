@@ -16,9 +16,18 @@ class TicketFileStorageServiceTest {
         properties.getStorage().getS3().setBucket("ticketswap-ticket-files");
         properties.getStorage().getS3().setPresignedGetExpiryMinutes(15);
 
+        MinioClient internalClient = MinioClient.builder()
+                .endpoint("http://localhost:9000")
+                .credentials("minio-access-key", "minio-secret-key")
+                .build();
+        MinioClient publicClient = MinioClient.builder()
+                .endpoint("http://localhost:9000")
+                .credentials("minio-access-key", "minio-secret-key")
+                .build();
+
         assertDoesNotThrow(() -> new TicketFileStorageService(
-                Mockito.mock(MinioClient.class),
-                Mockito.mock(MinioClient.class),
+                internalClient,
+                publicClient,
                 Mockito.mock(TicketFileRepository.class),
                 properties
         ));

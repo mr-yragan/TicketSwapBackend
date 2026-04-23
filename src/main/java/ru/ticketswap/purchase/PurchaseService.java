@@ -9,6 +9,10 @@ import ru.ticketswap.common.ConflictException;
 import ru.ticketswap.common.NotFoundException;
 import ru.ticketswap.hold.ListingHold;
 import ru.ticketswap.hold.ListingHoldRepository;
+import ru.ticketswap.partner.PartnerApiClient;
+import ru.ticketswap.partner.PartnerIntegrationException;
+import ru.ticketswap.partner.PartnerOrganizerCodeMapper;
+import ru.ticketswap.partner.PartnerTicketReissueResponse;
 import ru.ticketswap.ticket.TicketLot;
 import ru.ticketswap.ticket.TicketRepository;
 import ru.ticketswap.ticket.TicketStatus;
@@ -30,17 +34,23 @@ public class PurchaseService {
     private final ListingHoldRepository listingHoldRepository;
     private final TransactionTemplate tx;
     private final ListingStatusHistoryService listingStatusHistoryService;
+    private final PartnerApiClient partnerApiClient;
+    private final PartnerOrganizerCodeMapper partnerOrganizerCodeMapper;
 
     public PurchaseService(
             TicketRepository ticketRepository,
             ListingHoldRepository listingHoldRepository,
             PlatformTransactionManager transactionManager,
-            ListingStatusHistoryService listingStatusHistoryService
+            ListingStatusHistoryService listingStatusHistoryService,
+            PartnerApiClient partnerApiClient,
+            PartnerOrganizerCodeMapper partnerOrganizerCodeMapper
     ) {
         this.ticketRepository = ticketRepository;
         this.listingHoldRepository = listingHoldRepository;
         this.tx = new TransactionTemplate(transactionManager);
         this.listingStatusHistoryService = listingStatusHistoryService;
+        this.partnerApiClient = partnerApiClient;
+        this.partnerOrganizerCodeMapper = partnerOrganizerCodeMapper;
     }
 
     public ListingHold createHold(Long listingId, User buyer) {
@@ -52,10 +62,8 @@ public class PurchaseService {
     }
 
     public TicketLot buyNow(Long listingId, User buyer) {
-        // reserve listing + mark as processing
         tx.executeWithoutResult(status -> startProcessingTx(listingId, buyer));
 
-        // mocked payment (always OK)
         try {
             Thread.sleep(MOCK_PAYMENT_DELAY_MS);
         } catch (InterruptedException e) {
@@ -63,8 +71,12 @@ public class PurchaseService {
             throw new BusinessRuleException("Payment was interrupted");
         }
 
-        // finish purchase
-        return tx.execute(status -> completePurchaseTx(listingId, buyer));
+        ReissueResult reissueResult = reissueTicketWithPartner(listingId, buyer);
+        if (!reissueResult.success()) {
+            return tx.execute(status -> failPurchaseTx(listingId, buyer, reissueResult.failureReason()));
+        }
+
+        return tx.execute(status -> completePurchaseTx(listingId, buyer, reissueResult.reissuedTicketUid()));
     }
 
     private ListingHold createHoldTx(Long listingId, User buyer) {
@@ -130,7 +142,7 @@ public class PurchaseService {
         listingStatusHistoryService.transition(listing, TicketStatus.PROCESSING, "Purchase started", buyer);
     }
 
-    private TicketLot completePurchaseTx(Long listingId, User buyer) {
+    private TicketLot completePurchaseTx(Long listingId, User buyer, String reissuedTicketUid) {
         TicketLot listing = ticketRepository.findById(listingId)
                 .orElseThrow(() -> new NotFoundException("Ticket not found"));
 
@@ -149,11 +161,59 @@ public class PurchaseService {
             listing.setBuyer(buyer);
         }
 
+        listing.setReissuedTicketUid(reissuedTicketUid);
+        listingStatusHistoryService.recordStatus(listing, listing.getStatus(), listing.getStatus(), "Ticket reissued by partner", null);
         TicketLot saved = listingStatusHistoryService.transition(listing, TicketStatus.COMPLETED, "Purchase completed", buyer);
 
         listingHoldRepository.deleteByListingId(listingId);
 
         return saved;
+    }
+
+    private TicketLot failPurchaseTx(Long listingId, User buyer, String reason) {
+        TicketLot listing = ticketRepository.findById(listingId)
+                .orElseThrow(() -> new NotFoundException("Ticket not found"));
+
+        if (listing.getBuyer() == null || listing.getBuyer().getId() == null || !listing.getBuyer().getId().equals(buyer.getId())) {
+            listing.setBuyer(buyer);
+        }
+
+        TicketLot saved = listingStatusHistoryService.transition(listing, TicketStatus.FAILED, reason, null);
+        listingHoldRepository.deleteByListingId(listingId);
+        return saved;
+    }
+
+    private ReissueResult reissueTicketWithPartner(Long listingId, User buyer) {
+        TicketLot listing = ticketRepository.findById(listingId)
+                .orElseThrow(() -> new NotFoundException("Ticket not found"));
+
+        Optional<String> organizerCode = partnerOrganizerCodeMapper.resolveOrganizerCode(listing.getOrganizerName());
+        if (organizerCode.isEmpty()) {
+            return ReissueResult.failed("Partner reissue failed: unsupported organizer");
+        }
+
+        try {
+            PartnerTicketReissueResponse response = partnerApiClient.reissueTicket(
+                    organizerCode.get(),
+                    listing.getUid(),
+                    buyer.getEmail()
+            );
+
+            if (!response.success()) {
+                return ReissueResult.failed("Partner reissue failed: " + failureReason(response.reason()));
+            }
+
+            return ReissueResult.success(response.newTicketUid());
+        } catch (PartnerIntegrationException ex) {
+            return ReissueResult.failed("Partner reissue failed: integration error");
+        }
+    }
+
+    private String failureReason(String reason) {
+        if (reason == null || reason.isBlank()) {
+            return "unknown reason";
+        }
+        return reason.trim();
     }
 
     private TicketLot loadListingForPurchase(Long listingId, User buyer) {
@@ -185,5 +245,20 @@ public class PurchaseService {
         }
 
         return listing;
+    }
+
+    private record ReissueResult(
+            boolean success,
+            String reissuedTicketUid,
+            String failureReason
+    ) {
+
+        private static ReissueResult success(String reissuedTicketUid) {
+            return new ReissueResult(true, reissuedTicketUid, null);
+        }
+
+        private static ReissueResult failed(String failureReason) {
+            return new ReissueResult(false, null, failureReason);
+        }
     }
 }

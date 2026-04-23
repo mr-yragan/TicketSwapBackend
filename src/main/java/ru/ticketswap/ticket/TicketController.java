@@ -14,6 +14,7 @@ import ru.ticketswap.common.UnauthorizedException;
 import ru.ticketswap.hold.ListingHold;
 import ru.ticketswap.hold.ListingHoldRepository;
 import ru.ticketswap.hold.dto.ListingHoldResponse;
+import ru.ticketswap.partner.PartnerOrganizerCodeMapper;
 import ru.ticketswap.purchase.PurchaseService;
 import ru.ticketswap.storage.TicketFileStorageService;
 import ru.ticketswap.ticket.history.ListingStatusHistoryService;
@@ -45,6 +46,8 @@ public class TicketController {
     private final ListingHoldRepository listingHoldRepository;
     private final PurchaseService purchaseService;
     private final ListingLifecycleService listingLifecycleService;
+    private final ListingWriteService listingWriteService;
+    private final PartnerOrganizerCodeMapper partnerOrganizerCodeMapper;
     private final TicketFileStorageService ticketFileStorageService;
     private final ListingStatusHistoryService listingStatusHistoryService;
 
@@ -54,6 +57,8 @@ public class TicketController {
             ListingHoldRepository listingHoldRepository,
             PurchaseService purchaseService,
             ListingLifecycleService listingLifecycleService,
+            ListingWriteService listingWriteService,
+            PartnerOrganizerCodeMapper partnerOrganizerCodeMapper,
             TicketFileStorageService ticketFileStorageService,
             ListingStatusHistoryService listingStatusHistoryService
     ) {
@@ -62,6 +67,8 @@ public class TicketController {
         this.listingHoldRepository = listingHoldRepository;
         this.purchaseService = purchaseService;
         this.listingLifecycleService = listingLifecycleService;
+        this.listingWriteService = listingWriteService;
+        this.partnerOrganizerCodeMapper = partnerOrganizerCodeMapper;
         this.ticketFileStorageService = ticketFileStorageService;
         this.listingStatusHistoryService = listingStatusHistoryService;
     }
@@ -134,7 +141,7 @@ public class TicketController {
     ) {
         User seller = requireUser(userDetails);
         TicketLot saved = createListing(request, seller);
-        listingLifecycleService.onListingCreated(saved.getId());
+        saved = listingLifecycleService.validateListing(saved.getId());
         return ResponseEntity.status(HttpStatus.CREATED).body(toDetailsResponse(saved));
     }
 
@@ -155,7 +162,7 @@ public class TicketController {
                 saved = loadTicket(saved.getId());
             }
 
-            listingLifecycleService.onListingCreated(saved.getId());
+            saved = listingLifecycleService.validateListing(saved.getId());
             return ResponseEntity.status(HttpStatus.CREATED).body(toDetailsResponse(saved));
         } catch (RuntimeException ex) {
             ticketFileStorageService.deleteFilesQuietly(saved);
@@ -182,14 +189,8 @@ public class TicketController {
 
         TicketLot saved;
         if (requiresRevalidation) {
-            ticket.setBuyer(null);
-            saved = listingStatusHistoryService.transition(
-                    ticket,
-                    TicketStatus.CREATED,
-                    "Listing edited and sent for revalidation",
-                    seller
-            );
-            listingLifecycleService.onListingCreated(saved.getId());
+            saved = listingWriteService.prepareForRevalidation(ticket, seller);
+            saved = listingLifecycleService.validateListing(saved.getId());
         } else {
             saved = ticketRepository.saveAndFlush(ticket);
         }
@@ -475,7 +476,11 @@ public class TicketController {
                 || !safeEquals(ticket.getEventName(), request.eventName())
                 || !safeEquals(ticket.getEventDate(), request.eventDate())
                 || !safeEquals(ticket.getVenueName(), newVenueParts.venueName())
-                || !safeEquals(ticket.getVenueCity(), newVenueParts.venueCity());
+                || !safeEquals(ticket.getVenueCity(), newVenueParts.venueCity())
+                || !safeEquals(
+                        partnerOrganizerCodeMapper.normalizeOrganizerName(ticket.getOrganizerName()),
+                        partnerOrganizerCodeMapper.normalizeOrganizerName(request.organizerName())
+                );
     }
 
     private void applyEditableFields(TicketLot ticket, CreateTicketRequest request, VenueParts venueParts) {
@@ -529,6 +534,7 @@ public class TicketController {
                 ticket.getAdditionalInfo(),
                 ticket.getOrganizerName(),
                 ticket.getSellerComment(),
+                ticket.getReissuedTicketUid(),
                 sellerInfo,
                 ticket.hasTicketFile(),
                 ticket.getTicketFilesCount()

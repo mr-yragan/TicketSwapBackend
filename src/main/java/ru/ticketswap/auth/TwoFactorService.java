@@ -46,6 +46,7 @@ public class TwoFactorService {
                 expiresAt
         ));
 
+        return new PendingTwoFactorChallenge(challengeId, code, expiresAt);
         return new PendingTwoFactorChallenge(challengeId, user.getEmail(), code, expiresAt);
     }
 
