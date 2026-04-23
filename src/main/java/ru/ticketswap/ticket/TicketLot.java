@@ -21,6 +21,9 @@ public class TicketLot {
     @Column(nullable = false, unique = true)
     private String uid;
 
+    @Column(name = "reissued_ticket_uid")
+    private String reissuedTicketUid;
+
     @Column(nullable = false)
     private String eventName;
 
@@ -107,6 +110,14 @@ public class TicketLot {
 
     public void setUid(String uid) {
         this.uid = uid;
+    }
+
+    public String getReissuedTicketUid() {
+        return reissuedTicketUid;
+    }
+
+    public void setReissuedTicketUid(String reissuedTicketUid) {
+        this.reissuedTicketUid = reissuedTicketUid;
     }
 
     public String getEventName() {

@@ -40,6 +40,7 @@ public class MeController {
             UserRepository userRepository,
             TicketRepository ticketRepository,
             ListingHoldRepository listingHoldRepository,
+            UserIdentityService userIdentityService
             UserIdentityService userIdentityService,
             TwoFactorService twoFactorService
     ) {

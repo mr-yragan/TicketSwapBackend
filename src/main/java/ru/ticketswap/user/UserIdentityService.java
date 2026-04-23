@@ -9,6 +9,7 @@ import ru.ticketswap.common.ConflictException;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
@@ -79,15 +80,25 @@ public class UserIdentityService {
     }
 
     public UserDetails loadUserDetailsByIdentifier(String identifier) {
-        User user = findUserByIdentifier(identifier)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        User user;
+        try {
+            user = findUserByIdentifier(identifier)
+                    .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        } catch (DuplicateUserIdentityException ex) {
+            throw new UsernameNotFoundException("User not found", ex);
+        }
 
         return toUserDetails(user);
     }
 
     public UserDetails loadUserDetailsByEmail(String email) {
-        User user = findUserByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        User user;
+        try {
+            user = findUserByEmail(email)
+                    .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        } catch (DuplicateUserIdentityException ex) {
+            throw new UsernameNotFoundException("User not found", ex);
+        }
 
         return toUserDetails(user);
     }
@@ -116,13 +127,13 @@ public class UserIdentityService {
         String normalizedLogin = normalizeLogin(login);
 
         userRepository.findByLogin(normalizedLogin)
-                .filter(other -> !other.getId().equals(currentUserId))
+                .filter(other -> isDifferentUser(other, currentUserId))
                 .ifPresent(other -> {
                     throw new ConflictException("Login already in use");
                 });
 
         userRepository.findByPhoneNumber(normalizedLogin)
-                .filter(other -> !other.getId().equals(currentUserId))
+                .filter(other -> isDifferentUser(other, currentUserId))
                 .ifPresent(other -> {
                     throw new ConflictException("Login conflicts with an existing phone number");
                 });
@@ -132,13 +143,13 @@ public class UserIdentityService {
         String normalizedPhone = normalizePhone(phoneNumber);
 
         userRepository.findByPhoneNumber(normalizedPhone)
-                .filter(other -> !other.getId().equals(currentUserId))
+                .filter(other -> isDifferentUser(other, currentUserId))
                 .ifPresent(other -> {
                     throw new ConflictException("Phone number already in use");
                 });
 
         userRepository.findByLogin(normalizedPhone)
-                .filter(other -> !other.getId().equals(currentUserId))
+                .filter(other -> isDifferentUser(other, currentUserId))
                 .ifPresent(other -> {
                     throw new ConflictException("Phone number conflicts with an existing login");
                 });
@@ -192,5 +203,9 @@ public class UserIdentityService {
             throw new DuplicateUserIdentityException(source);
         }
         return Optional.of(users.get(0));
+    }
+
+    private boolean isDifferentUser(User other, Long currentUserId) {
+        return !Objects.equals(other.getId(), currentUserId);
     }
 }

@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: 019-tickets-reissued-ticket-uid
+      author: nikolay
+      changes:
+        - addColumn:
+            tableName: tickets
+            columns:
+              - column:
+                  name: reissued_ticket_uid
+                  type: varchar(255)

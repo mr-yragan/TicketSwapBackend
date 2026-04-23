@@ -32,7 +32,7 @@ public class ListingStatusHistoryService {
     public TicketLot transition(TicketLot listing, TicketStatus newStatus, String reason, User changedByUser) {
         TicketStatus fromStatus = listing.getStatus();
         if (fromStatus == newStatus) {
-            return ticketRepository.saveAndFlush(listing);
+            return listing;
         }
 
         listing.setStatus(newStatus);

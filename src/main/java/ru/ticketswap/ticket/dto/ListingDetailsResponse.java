@@ -14,6 +14,7 @@ public record ListingDetailsResponse(
         String additionalInfo,
         String organizerName,
         String sellerComment,
+        String reissuedTicketUid,
         SellerInfo seller,
         boolean hasTicketFile,
         int ticketFilesCount

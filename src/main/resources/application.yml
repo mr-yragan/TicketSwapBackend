@@ -64,3 +64,7 @@ ticketswap:
     from: ${TICKETSWAP_MAIL_FROM:no-reply@ticketswap.local}
     password-reset-url-base: ${TICKETSWAP_PASSWORD_RESET_URL_BASE:http://localhost:3000/reset-password}
     email-verification-url-base: ${TICKETSWAP_EMAIL_VERIFICATION_URL_BASE:http://localhost:3000/verify-email}
+  partner-api:
+    base-url: ${TICKETSWAP_PARTNER_API_BASE_URL:http://localhost:${server.port}}
+    connect-timeout-ms: ${TICKETSWAP_PARTNER_API_CONNECT_TIMEOUT_MS:1000}
+    read-timeout-ms: ${TICKETSWAP_PARTNER_API_READ_TIMEOUT_MS:2000}
