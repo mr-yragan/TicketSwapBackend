@@ -53,6 +53,11 @@ public class AuthController {
         return ResponseEntity.ok(authService.verifyTwoFactor(request));
     }
 
+    @PostMapping("/2fa/resend")
+    public ResponseEntity<LoginResponse> resendTwoFactor(@Valid @RequestBody TwoFactorResendRequest request) {
+        return ResponseEntity.ok(authService.resendTwoFactor(request));
+    }
+
     @PostMapping("/password/forgot")
     public ResponseEntity<ForgotPasswordResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         passwordResetService.requestPasswordReset(request.email());

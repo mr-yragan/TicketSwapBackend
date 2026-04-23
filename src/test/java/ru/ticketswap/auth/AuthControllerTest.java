@@ -13,6 +13,9 @@ import ru.ticketswap.auth.dto.LoginRequest;
 import ru.ticketswap.auth.dto.LoginResponse;
 import ru.ticketswap.auth.dto.ResetPasswordRequest;
 import ru.ticketswap.auth.dto.ResetPasswordResponse;
+import ru.ticketswap.auth.dto.TwoFactorResendRequest;
+
+import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.verify;
@@ -26,6 +29,9 @@ class AuthControllerTest {
 
     @Mock
     private PasswordResetService passwordResetService;
+
+    @Mock
+    private EmailVerificationService emailVerificationService;
 
     @InjectMocks
     private AuthController authController;
@@ -42,6 +48,23 @@ class AuthControllerTest {
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(loginResponse, response.getBody());
         verify(authService).login(request);
+    }
+
+    @Test
+    void resendTwoFactorDelegatesToAuthService() {
+        TwoFactorResendRequest request = new TwoFactorResendRequest("challenge-123");
+        LoginResponse loginResponse = LoginResponse.twoFactorRequired(
+                "challenge-456",
+                Instant.parse("2026-04-23T12:00:00Z")
+        );
+
+        when(authService.resendTwoFactor(request)).thenReturn(loginResponse);
+
+        ResponseEntity<LoginResponse> response = authController.resendTwoFactor(request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(loginResponse, response.getBody());
+        verify(authService).resendTwoFactor(request);
     }
 
     @Test

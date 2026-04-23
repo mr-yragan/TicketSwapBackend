@@ -11,6 +11,7 @@ import ru.ticketswap.auth.dto.AuthRequest;
 import ru.ticketswap.auth.dto.AuthResponse;
 import ru.ticketswap.auth.dto.LoginRequest;
 import ru.ticketswap.auth.dto.LoginResponse;
+import ru.ticketswap.auth.dto.TwoFactorResendRequest;
 import ru.ticketswap.auth.dto.TwoFactorVerifyRequest;
 import ru.ticketswap.common.ConflictException;
 import ru.ticketswap.common.UnauthorizedException;
@@ -98,5 +99,11 @@ public class AuthService {
     public AuthResponse verifyTwoFactor(TwoFactorVerifyRequest request) {
         User user = twoFactorService.verifyCode(request.challengeId(), request.code());
         return new AuthResponse(jwtService.generate(user.getEmail()));
+    }
+
+    public LoginResponse resendTwoFactor(TwoFactorResendRequest request) {
+        TwoFactorService.PendingTwoFactorChallenge challenge = twoFactorService.resendChallenge(request.challengeId());
+        mailService.sendTwoFactorCode(challenge.email(), challenge.code(), challenge.expiresAt());
+        return LoginResponse.twoFactorRequired(challenge.challengeId(), challenge.expiresAt());
     }
 }

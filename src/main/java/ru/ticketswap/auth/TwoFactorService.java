@@ -46,7 +46,29 @@ public class TwoFactorService {
                 expiresAt
         ));
 
-        return new PendingTwoFactorChallenge(challengeId, code, expiresAt);
+        return new PendingTwoFactorChallenge(challengeId, user.getEmail(), code, expiresAt);
+    }
+
+    @Transactional(noRollbackFor = {
+            ExpiredTwoFactorCodeException.class,
+            UnauthorizedException.class
+    })
+    public PendingTwoFactorChallenge resendChallenge(String challengeId) {
+        Instant now = Instant.now();
+        TwoFactorChallenge challenge = challengeRepository.findForUpdateByChallengeId(challengeId)
+                .orElseThrow(() -> new UnauthorizedException("2FA confirmation is invalid or expired"));
+
+        if (challenge.isConsumed()) {
+            throw new UnauthorizedException("2FA confirmation is invalid or expired");
+        }
+
+        if (challenge.isExpired(now)) {
+            challenge.markConsumed(now);
+            throw new ExpiredTwoFactorCodeException("2FA code expired");
+        }
+
+        challenge.markConsumed(now);
+        return createChallenge(challenge.getUser());
     }
 
     @Transactional(noRollbackFor = {
@@ -91,6 +113,7 @@ public class TwoFactorService {
 
     public record PendingTwoFactorChallenge(
             String challengeId,
+            String email,
             String code,
             Instant expiresAt
     ) {

@@ -5,11 +5,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+import ru.ticketswap.auth.TwoFactorService;
 import ru.ticketswap.common.UnauthorizedException;
 import ru.ticketswap.hold.ListingHold;
 import ru.ticketswap.hold.ListingHoldRepository;
 import ru.ticketswap.me.dto.HoldResponse;
 import ru.ticketswap.me.dto.MeProfileResponse;
+import ru.ticketswap.me.dto.TwoFactorStatusResponse;
 import ru.ticketswap.me.dto.UpdateMeRequest;
 import ru.ticketswap.ticket.TicketLot;
 import ru.ticketswap.ticket.TicketRepository;
@@ -32,17 +34,20 @@ public class MeController {
     private final TicketRepository ticketRepository;
     private final ListingHoldRepository listingHoldRepository;
     private final UserIdentityService userIdentityService;
+    private final TwoFactorService twoFactorService;
 
     public MeController(
             UserRepository userRepository,
             TicketRepository ticketRepository,
             ListingHoldRepository listingHoldRepository,
-            UserIdentityService userIdentityService
+            UserIdentityService userIdentityService,
+            TwoFactorService twoFactorService
     ) {
         this.userRepository = userRepository;
         this.ticketRepository = ticketRepository;
         this.listingHoldRepository = listingHoldRepository;
         this.userIdentityService = userIdentityService;
+        this.twoFactorService = twoFactorService;
     }
 
     @GetMapping
@@ -72,6 +77,36 @@ public class MeController {
 
         userRepository.save(user);
         return ResponseEntity.ok(toMeResponse(user));
+    }
+
+    @GetMapping("/2fa")
+    public ResponseEntity<TwoFactorStatusResponse> getTwoFactorStatus(
+            @AuthenticationPrincipal UserDetails principal
+    ) {
+        User user = requireUser(principal);
+        return ResponseEntity.ok(new TwoFactorStatusResponse(user.isTwoFactorEnabled()));
+    }
+
+    @PostMapping("/2fa/enable")
+    public ResponseEntity<TwoFactorStatusResponse> enableTwoFactor(
+            @AuthenticationPrincipal UserDetails principal
+    ) {
+        User user = requireUser(principal);
+        user.setTwoFactorEnabled(true);
+        userRepository.save(user);
+        twoFactorService.invalidateChallengesForUser(user.getId());
+        return ResponseEntity.ok(new TwoFactorStatusResponse(true));
+    }
+
+    @PostMapping("/2fa/disable")
+    public ResponseEntity<TwoFactorStatusResponse> disableTwoFactor(
+            @AuthenticationPrincipal UserDetails principal
+    ) {
+        User user = requireUser(principal);
+        user.setTwoFactorEnabled(false);
+        userRepository.save(user);
+        twoFactorService.invalidateChallengesForUser(user.getId());
+        return ResponseEntity.ok(new TwoFactorStatusResponse(false));
     }
 
     @GetMapping("/listings")
