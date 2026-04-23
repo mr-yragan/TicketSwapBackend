@@ -8,8 +8,11 @@ import org.springframework.web.bind.annotation.*;
 import ru.ticketswap.common.UnauthorizedException;
 import ru.ticketswap.hold.ListingHold;
 import ru.ticketswap.hold.ListingHoldRepository;
+import ru.ticketswap.auth.TwoFactorService;
 import ru.ticketswap.me.dto.HoldResponse;
 import ru.ticketswap.me.dto.MeProfileResponse;
+import ru.ticketswap.me.dto.TwoFactorStatusResponse;
+import ru.ticketswap.me.dto.UpdateTwoFactorRequest;
 import ru.ticketswap.me.dto.UpdateMeRequest;
 import ru.ticketswap.ticket.TicketLot;
 import ru.ticketswap.ticket.TicketRepository;
@@ -32,17 +35,20 @@ public class MeController {
     private final TicketRepository ticketRepository;
     private final ListingHoldRepository listingHoldRepository;
     private final UserIdentityService userIdentityService;
+    private final TwoFactorService twoFactorService;
 
     public MeController(
             UserRepository userRepository,
             TicketRepository ticketRepository,
             ListingHoldRepository listingHoldRepository,
-            UserIdentityService userIdentityService
+            UserIdentityService userIdentityService,
+            TwoFactorService twoFactorService
     ) {
         this.userRepository = userRepository;
         this.ticketRepository = ticketRepository;
         this.listingHoldRepository = listingHoldRepository;
         this.userIdentityService = userIdentityService;
+        this.twoFactorService = twoFactorService;
     }
 
     @GetMapping
@@ -130,6 +136,29 @@ public class MeController {
         return ResponseEntity.ok(res);
     }
 
+    @GetMapping("/2fa")
+    public ResponseEntity<TwoFactorStatusResponse> twoFactorStatus(@AuthenticationPrincipal UserDetails principal) {
+        User user = requireUser(principal);
+        return ResponseEntity.ok(new TwoFactorStatusResponse(user.isTwoFactorEnabled()));
+    }
+
+    @PatchMapping("/2fa")
+    public ResponseEntity<TwoFactorStatusResponse> updateTwoFactor(
+            @AuthenticationPrincipal UserDetails principal,
+            @Valid @RequestBody UpdateTwoFactorRequest request
+    ) {
+        User user = requireUser(principal);
+        boolean enabled = Boolean.TRUE.equals(request.twoFactorEnabled());
+        user.setTwoFactorEnabled(enabled);
+        userRepository.save(user);
+
+        if (!enabled) {
+            twoFactorService.invalidateChallengesForUser(user.getId());
+        }
+
+        return ResponseEntity.ok(new TwoFactorStatusResponse(enabled));
+    }
+
     private User requireUser(UserDetails principal) {
         if (principal == null || principal.getUsername() == null) {
             throw new UnauthorizedException("Unauthorized");
@@ -143,6 +172,7 @@ public class MeController {
                 user.getId(),
                 user.getEmail(),
                 user.isEmailVerified(),
+                user.isTwoFactorEnabled(),
                 user.getLogin(),
                 user.getPhoneNumber(),
                 user.getRole(),
