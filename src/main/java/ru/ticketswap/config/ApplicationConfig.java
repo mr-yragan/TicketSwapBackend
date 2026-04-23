@@ -1,5 +1,6 @@
 package ru.ticketswap.config;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -9,15 +10,21 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.client.RestClient;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import ru.ticketswap.user.UserIdentityService;
+
+import java.time.Clock;
 
 @Configuration
 public class ApplicationConfig {
 
     private final UserIdentityService userIdentityService;
+    private final TicketSwapProperties ticketSwapProperties;
 
-    public ApplicationConfig(UserIdentityService userIdentityService) {
+    public ApplicationConfig(UserIdentityService userIdentityService, TicketSwapProperties ticketSwapProperties) {
         this.userIdentityService = userIdentityService;
+        this.ticketSwapProperties = ticketSwapProperties;
     }
 
     @Bean
@@ -42,4 +49,25 @@ public class ApplicationConfig {
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
+
+    @Bean
+    @Qualifier("partnerApiRestClient")
+    public RestClient partnerApiRestClient() {
+        TicketSwapProperties.PartnerApi properties = ticketSwapProperties.getPartnerApi();
+
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Math.toIntExact(properties.getConnectTimeoutMs()));
+        requestFactory.setReadTimeout(Math.toIntExact(properties.getReadTimeoutMs()));
+
+        return RestClient.builder()
+                .baseUrl(properties.getBaseUrl())
+                .requestFactory(requestFactory)
+                .build();
+    }
+
+    @Bean
+    public Clock clock() {
+        return Clock.systemUTC();
+    }
+
 }

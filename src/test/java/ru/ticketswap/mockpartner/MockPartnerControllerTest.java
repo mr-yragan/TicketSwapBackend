@@ -24,6 +24,7 @@ import ru.ticketswap.mockpartner.exception.MockPartnerExceptionHandler;
 import ru.ticketswap.mockpartner.service.MockPartnerEventMapper;
 import ru.ticketswap.mockpartner.service.MockPartnerOrganizerResolver;
 import ru.ticketswap.mockpartner.service.MockPartnerService;
+import ru.ticketswap.mockpartner.service.MockTicketReissueService;
 import ru.ticketswap.mockpartner.service.MockTicketVerificationService;
 import ru.ticketswap.user.UserIdentityService;
 
@@ -52,6 +53,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         MockPartnerOrganizerResolver.class,
         MockPartnerEventMapper.class,
         MockTicketVerificationService.class,
+        MockTicketReissueService.class,
         MockPartnerControllerTest.TestConfig.class
 })
 class MockPartnerControllerTest {
@@ -121,6 +123,71 @@ class MockPartnerControllerTest {
                 .andExpect(jsonPath("$.ticketUid").value("TICKET-12345"))
                 .andExpect(jsonPath("$.organizerCode").value("org1"))
                 .andExpect(jsonPath("$.valid").exists());
+    }
+
+    @Test
+    void postReissueWithValidBodyReturns200Json() throws Exception {
+        mockMvc.perform(post("/api/mock/partners/org1/tickets/reissue")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "originalTicketUid": "TICKET-12345",
+                                  "buyerEmail": "buyer@example.com"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.originalTicketUid").value("TICKET-12345"))
+                .andExpect(jsonPath("$.newTicketUid").value("REISSUED-org1-TICKET-12345"))
+                .andExpect(jsonPath("$.organizerCode").value("org1"));
+    }
+
+    @Test
+    void postReissueWithFailUidReturns200JsonFailure() throws Exception {
+        mockMvc.perform(post("/api/mock/partners/org1/tickets/reissue")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "originalTicketUid": "TICKET-FAIL-1",
+                                  "buyerEmail": "buyer@example.com"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.newTicketUid").doesNotExist())
+                .andExpect(jsonPath("$.reason").value("Mock reissue failed"));
+    }
+
+    @Test
+    void reissueWithoutOriginalTicketUidReturns400Json() throws Exception {
+        mockMvc.perform(post("/api/mock/partners/org1/tickets/reissue")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "buyerEmail": "buyer@example.com"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message").value("originalTicketUid must not be blank"))
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    void reissueWithoutBuyerEmailReturns400Json() throws Exception {
+        mockMvc.perform(post("/api/mock/partners/org1/tickets/reissue")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "originalTicketUid": "TICKET-12345"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.message").value("buyerEmail must not be blank"));
     }
 
     @Test
@@ -231,6 +298,18 @@ class MockPartnerControllerTest {
     @Test
     void unknownOrganizerOnVerifyReturns404JsonEvenWhenBodyIsMalformed() throws Exception {
         mockMvc.perform(post("/api/mock/partners/org3/tickets/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{"))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(jsonPath("$.message").value("Organizer not found: org3"))
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    void unknownOrganizerOnReissueReturns404JsonEvenWhenBodyIsMalformed() throws Exception {
+        mockMvc.perform(post("/api/mock/partners/org3/tickets/reissue")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{"))
                 .andExpect(status().isNotFound())

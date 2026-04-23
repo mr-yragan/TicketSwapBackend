@@ -4,6 +4,8 @@ import org.springframework.stereotype.Service;
 import ru.ticketswap.mockpartner.data.MockPartnerEventData;
 import ru.ticketswap.mockpartner.data.MockPartnerDataProvider;
 import ru.ticketswap.mockpartner.dto.MockPartnerEventResponse;
+import ru.ticketswap.mockpartner.dto.MockTicketReissueRequest;
+import ru.ticketswap.mockpartner.dto.MockTicketReissueResponse;
 import ru.ticketswap.mockpartner.dto.MockTicketVerifyRequest;
 import ru.ticketswap.mockpartner.dto.MockTicketVerifyResponse;
 
@@ -18,17 +20,20 @@ public class MockPartnerService {
     private final MockPartnerOrganizerResolver mockPartnerOrganizerResolver;
     private final MockPartnerEventMapper mockPartnerEventMapper;
     private final MockTicketVerificationService mockTicketVerificationService;
+    private final MockTicketReissueService mockTicketReissueService;
 
     public MockPartnerService(
             MockPartnerDataProvider mockPartnerDataProvider,
             MockPartnerOrganizerResolver mockPartnerOrganizerResolver,
             MockPartnerEventMapper mockPartnerEventMapper,
-            MockTicketVerificationService mockTicketVerificationService
+            MockTicketVerificationService mockTicketVerificationService,
+            MockTicketReissueService mockTicketReissueService
     ) {
         this.mockPartnerDataProvider = mockPartnerDataProvider;
         this.mockPartnerOrganizerResolver = mockPartnerOrganizerResolver;
         this.mockPartnerEventMapper = mockPartnerEventMapper;
         this.mockTicketVerificationService = mockTicketVerificationService;
+        this.mockTicketReissueService = mockTicketReissueService;
     }
 
     public List<MockPartnerEventResponse> getUpcomingEvents(String organizerCode) {
@@ -48,5 +53,10 @@ public class MockPartnerService {
     public MockTicketVerifyResponse verifyTicket(String organizerCode, MockTicketVerifyRequest request) {
         String resolvedOrganizerCode = mockPartnerOrganizerResolver.requireSupportedOrganizer(organizerCode);
         return mockTicketVerificationService.verify(resolvedOrganizerCode, request);
+    }
+
+    public MockTicketReissueResponse reissueTicket(String organizerCode, MockTicketReissueRequest request) {
+        String resolvedOrganizerCode = mockPartnerOrganizerResolver.requireSupportedOrganizer(organizerCode);
+        return mockTicketReissueService.reissue(resolvedOrganizerCode, request);
     }
 }

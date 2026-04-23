@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.ticketswap.mockpartner.dto.MockPartnerEventResponse;
+import ru.ticketswap.mockpartner.dto.MockTicketReissueRequest;
+import ru.ticketswap.mockpartner.dto.MockTicketReissueResponse;
 import ru.ticketswap.mockpartner.dto.MockTicketVerifyRequest;
 import ru.ticketswap.mockpartner.dto.MockTicketVerifyResponse;
 import ru.ticketswap.mockpartner.service.MockPartnerService;
@@ -35,5 +37,13 @@ public class MockPartnerController {
             @RequestBody(required = false) MockTicketVerifyRequest request
     ) {
         return ResponseEntity.ok(mockPartnerService.verifyTicket(organizerCode, request));
+    }
+
+    @PostMapping("/{organizerCode}/tickets/reissue")
+    public ResponseEntity<MockTicketReissueResponse> reissueTicket(
+            @PathVariable String organizerCode,
+            @RequestBody(required = false) MockTicketReissueRequest request
+    ) {
+        return ResponseEntity.ok(mockPartnerService.reissueTicket(organizerCode, request));
     }
 }

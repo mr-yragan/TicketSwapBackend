@@ -141,3 +141,6 @@ databaseChangeLog:
   - include:
       file: changes/018-mock-organizer-user.yaml
       relativeToChangelogFile: true
+  - include:
+      file: changes/019-tickets-reissued-ticket-uid.yaml
+      relativeToChangelogFile: true

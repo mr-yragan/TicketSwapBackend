@@ -15,6 +15,7 @@ public class TicketSwapProperties {
     private final Cors cors = new Cors();
     private final Storage storage = new Storage();
     private final Mail mail = new Mail();
+    private final PartnerApi partnerApi = new PartnerApi();
 
     public Security getSecurity() {
         return security;
@@ -30,6 +31,10 @@ public class TicketSwapProperties {
 
     public Mail getMail() {
         return mail;
+    }
+
+    public PartnerApi getPartnerApi() {
+        return partnerApi;
     }
 
     public static class Security {
@@ -268,4 +273,40 @@ public class TicketSwapProperties {
             this.emailVerificationUrlBase = emailVerificationUrlBase;
         }
     }
+
+    public static class PartnerApi {
+        @NotBlank
+        private String baseUrl;
+
+        @Min(1)
+        private long connectTimeoutMs = 1_000;
+
+        @Min(1)
+        private long readTimeoutMs = 2_000;
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        public long getConnectTimeoutMs() {
+            return connectTimeoutMs;
+        }
+
+        public void setConnectTimeoutMs(long connectTimeoutMs) {
+            this.connectTimeoutMs = connectTimeoutMs;
+        }
+
+        public long getReadTimeoutMs() {
+            return readTimeoutMs;
+        }
+
+        public void setReadTimeoutMs(long readTimeoutMs) {
+            this.readTimeoutMs = readTimeoutMs;
+        }
+    }
+
 }

@@ -10,6 +10,7 @@ import ru.ticketswap.mockpartner.dto.MockPartnerEventResponse;
 import ru.ticketswap.mockpartner.service.MockPartnerEventMapper;
 import ru.ticketswap.mockpartner.service.MockPartnerOrganizerResolver;
 import ru.ticketswap.mockpartner.service.MockPartnerService;
+import ru.ticketswap.mockpartner.service.MockTicketReissueService;
 import ru.ticketswap.mockpartner.service.MockTicketVerificationService;
 
 import java.time.Instant;
@@ -32,13 +33,17 @@ class MockPartnerServiceTest {
     @Mock
     private MockTicketVerificationService mockTicketVerificationService;
 
+    @Mock
+    private MockTicketReissueService mockTicketReissueService;
+
     @Test
     void getUpcomingEventsFiltersByOrganizerFutureDateSortsAndComputesLocalDate() {
         MockPartnerService service = new MockPartnerService(
                 mockPartnerDataProvider,
                 mockPartnerOrganizerResolver,
                 new MockPartnerEventMapper(),
-                mockTicketVerificationService
+                mockTicketVerificationService,
+                mockTicketReissueService
         );
 
         Instant now = Instant.now();
@@ -111,7 +116,8 @@ class MockPartnerServiceTest {
                 mockPartnerDataProvider,
                 mockPartnerOrganizerResolver,
                 new MockPartnerEventMapper(),
-                mockTicketVerificationService
+                mockTicketVerificationService,
+                mockTicketReissueService
         );
 
         when(mockPartnerOrganizerResolver.requireSupportedOrganizer("org1")).thenReturn("org1");
