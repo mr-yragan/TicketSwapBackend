@@ -144,3 +144,12 @@ databaseChangeLog:
   - include:
       file: changes/019-tickets-reissued-ticket-uid.yaml
       relativeToChangelogFile: true
+  - include:
+      file: changes/020-organizers-venues-events.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/021-tickets-add-event-id.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/022-admin-user.yaml
+      relativeToChangelogFile: true

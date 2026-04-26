@@ -8,11 +8,11 @@ import ru.ticketswap.mockpartner.exception.MockPartnerBadRequestException;
 @Service
 public class MockTicketReissueService {
 
-    private static final String REISSUE_FAILED_REASON = "Mock reissue failed";
+    private static final String REISSUE_FAILED_REASON = "Mock-перевыпуск не выполнен";
 
     public MockTicketReissueResponse reissue(String organizerCode, MockTicketReissueRequest request) {
         if (request == null) {
-            throw new MockPartnerBadRequestException("Request body must not be empty");
+            throw new MockPartnerBadRequestException("Тело запроса не должно быть пустым");
         }
 
         String originalTicketUid = request.originalTicketUid();
@@ -30,13 +30,13 @@ public class MockTicketReissueService {
 
     private void validateOriginalTicketUid(String originalTicketUid) {
         if (originalTicketUid == null || originalTicketUid.isBlank()) {
-            throw new MockPartnerBadRequestException("originalTicketUid must not be blank");
+            throw new MockPartnerBadRequestException("UID исходного билета не должен быть пустым");
         }
     }
 
     private void validateBuyerEmail(String buyerEmail) {
         if (buyerEmail == null || buyerEmail.isBlank()) {
-            throw new MockPartnerBadRequestException("buyerEmail must not be blank");
+            throw new MockPartnerBadRequestException("Почта покупателя не должна быть пустой");
         }
     }
 }

@@ -6,35 +6,45 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import ru.ticketswap.common.UnauthorizedException;
+import ru.ticketswap.event.EventRepository;
 import ru.ticketswap.organizer.dto.OrganizerDashboardResponse;
 import ru.ticketswap.organizer.dto.OrganizerProfileResponse;
 import ru.ticketswap.user.User;
-import ru.ticketswap.user.UserRepository;
 
 @RestController
 @RequestMapping("/api/organizer")
 public class OrganizerController {
 
-    private final UserRepository userRepository;
+    private final OrganizerLookupService organizerLookupService;
+    private final EventRepository eventRepository;
 
-    public OrganizerController(UserRepository userRepository) {
-        this.userRepository = userRepository;
+    public OrganizerController(OrganizerLookupService organizerLookupService, EventRepository eventRepository) {
+        this.organizerLookupService = organizerLookupService;
+        this.eventRepository = eventRepository;
     }
 
     @GetMapping("/me")
     public ResponseEntity<OrganizerProfileResponse> getOrganizerProfile(
             @AuthenticationPrincipal UserDetails principal
     ) {
-        User organizer = requireOrganizer(principal);
+        OrganizerLookupService.OrganizerContext context = organizerLookupService.requireOrganizerContext(principal);
+        User user = context.user();
+        Organizer organizer = context.organizer();
 
         return ResponseEntity.ok(new OrganizerProfileResponse(
-                organizer.getId(),
-                organizer.getEmail(),
-                organizer.getLogin(),
-                organizer.getRole(),
-                organizer.isEmailVerified(),
-                organizer.getCreatedAt()
+                new OrganizerProfileResponse.UserInfo(
+                        user.getId(),
+                        user.getEmail(),
+                        user.getLogin(),
+                        user.getRole(),
+                        user.isEmailVerified()
+                ),
+                new OrganizerProfileResponse.OrganizerInfo(
+                        organizer.getId(),
+                        organizer.getName(),
+                        organizer.getApiKey(),
+                        organizer.getContactEmail()
+                )
         ));
     }
 
@@ -42,24 +52,16 @@ public class OrganizerController {
     public ResponseEntity<OrganizerDashboardResponse> getOrganizerDashboard(
             @AuthenticationPrincipal UserDetails principal
     ) {
-        User organizer = requireOrganizer(principal);
+        Organizer organizer = organizerLookupService.requireOrganizerContext(principal).organizer();
+        long eventsCount = eventRepository.countByOrganizerId(organizer.getId());
 
         return ResponseEntity.ok(new OrganizerDashboardResponse(
                 organizer.getId(),
-                organizer.getEmail(),
-                organizer.getRole(),
-                true,
-                0,
-                "Mock organizer"
+                organizer.getName(),
+                organizer.getApiKey(),
+                organizer.getContactEmail(),
+                eventsCount,
+                true
         ));
-    }
-
-    private User requireOrganizer(UserDetails principal) {
-        if (principal == null || principal.getUsername() == null) {
-            throw new UnauthorizedException("Unauthorized");
-        }
-
-        return userRepository.findByEmail(principal.getUsername())
-                .orElseThrow(() -> new UnauthorizedException("Unauthorized"));
     }
 }

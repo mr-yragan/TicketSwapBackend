@@ -2,7 +2,9 @@ package ru.ticketswap.ticket;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
+import ru.ticketswap.event.EventRepository;
 import ru.ticketswap.hold.ListingHoldRepository;
+import ru.ticketswap.organizer.OrganizerRepository;
 import ru.ticketswap.partner.PartnerOrganizerCodeMapper;
 import ru.ticketswap.purchase.PurchaseService;
 import ru.ticketswap.storage.TicketFileStorageService;
@@ -26,10 +28,10 @@ class TicketControllerRevalidationTest {
         User seller = new User("seller@example.com", "hash");
         TicketLot listing = new TicketLot(
                 "uid-1",
-                "Concert",
+                "Концерт",
                 LocalDateTime.now().plusDays(10),
-                "Arena",
-                "Berlin",
+                "Арена",
+                "Берлин",
                 BigDecimal.valueOf(150),
                 null,
                 " org1 ",
@@ -40,9 +42,9 @@ class TicketControllerRevalidationTest {
 
         CreateTicketRequest request = new CreateTicketRequest(
                 "uid-1",
-                "Concert",
+                "Концерт",
                 listing.getEventDate(),
-                "Arena, Berlin",
+                "Арена, Берлин",
                 BigDecimal.valueOf(150),
                 null,
                 "ORG1",
@@ -67,10 +69,10 @@ class TicketControllerRevalidationTest {
         User seller = new User("seller@example.com", "hash");
         TicketLot listing = new TicketLot(
                 "uid-1",
-                "Concert",
+                "Концерт",
                 LocalDateTime.now().plusDays(10),
-                "Arena",
-                "Berlin",
+                "Арена",
+                "Берлин",
                 BigDecimal.valueOf(150),
                 null,
                 "org1",
@@ -81,9 +83,9 @@ class TicketControllerRevalidationTest {
 
         CreateTicketRequest request = new CreateTicketRequest(
                 "uid-1",
-                "Concert",
+                "Концерт",
                 listing.getEventDate(),
-                "Arena, Berlin",
+                "Арена, Берлин",
                 BigDecimal.valueOf(150),
                 null,
                 "org2",
@@ -108,10 +110,10 @@ class TicketControllerRevalidationTest {
         User seller = new User("seller@example.com", "hash");
         TicketLot listing = new TicketLot(
                 "uid-1",
-                "Concert",
+                "Концерт",
                 LocalDateTime.now().plusDays(10),
-                "Arena",
-                "Berlin",
+                "Арена",
+                "Берлин",
                 BigDecimal.valueOf(150),
                 null,
                 "org1",
@@ -122,12 +124,12 @@ class TicketControllerRevalidationTest {
 
         CreateTicketRequest request = new CreateTicketRequest(
                 "uid-1",
-                "Concert",
+                "Концерт",
                 listing.getEventDate(),
-                "Arena, Berlin",
+                "Арена, Берлин",
                 BigDecimal.valueOf(150),
                 null,
-                "Amazing Organizer",
+                "Неизвестный организатор",
                 null
         );
 
@@ -151,7 +153,8 @@ class TicketControllerRevalidationTest {
                 mock(PurchaseService.class),
                 mock(ListingLifecycleService.class),
                 mock(ListingWriteService.class),
-                new PartnerOrganizerCodeMapper(),
+                new PartnerOrganizerCodeMapper(mock(OrganizerRepository.class)),
+                mock(EventRepository.class),
                 mock(TicketFileStorageService.class),
                 mock(ListingStatusHistoryService.class)
         );

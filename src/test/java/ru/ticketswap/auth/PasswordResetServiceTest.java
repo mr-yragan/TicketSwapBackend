@@ -107,7 +107,7 @@ class PasswordResetServiceTest {
         when(userIdentityService.findUserByEmail("user@example.com")).thenReturn(Optional.of(user));
         when(passwordResetTokenRepository.save(any(PasswordResetToken.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        doThrow(new MailDeliveryException("mail failed", new RuntimeException("boom")))
+        doThrow(new MailDeliveryException("Ошибка отправки письма", new RuntimeException("Внутренняя ошибка")))
                 .when(mailService)
                 .sendPasswordResetLink(eq("user@example.com"), anyString(), any(Instant.class));
 

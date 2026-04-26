@@ -8,7 +8,7 @@ import ru.ticketswap.user.User;
 @Service
 public class ListingWriteService {
 
-    public static final String REVALIDATION_REASON = "Listing edited and sent for revalidation";
+    public static final String REVALIDATION_REASON = "Объявление изменено и отправлено на повторную проверку";
 
     private final TicketRepository ticketRepository;
     private final ListingStatusHistoryService listingStatusHistoryService;

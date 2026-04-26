@@ -65,12 +65,12 @@ public class MinioConfig {
                         Thread.sleep(STARTUP_DELAY_MS);
                     } catch (InterruptedException interruptedException) {
                         Thread.currentThread().interrupt();
-                        throw new IllegalStateException("MinIO bucket initialization was interrupted", interruptedException);
+                        throw new IllegalStateException("Инициализация bucket MinIO была прервана", interruptedException);
                     }
                 }
             }
 
-            throw new IllegalStateException("Failed to initialize MinIO bucket", lastException);
+            throw new IllegalStateException("Не удалось инициализировать bucket MinIO", lastException);
         };
     }
 }

@@ -45,24 +45,24 @@ class MockTicketVerificationServiceTest {
         if (response.valid()) {
             assertNull(response.reason());
         } else {
-            assertEquals("Mock validation failed", response.reason());
+            assertEquals("Mock-проверка не пройдена", response.reason());
         }
     }
 
     @Test
     void verifyRejectsNullEmptyAndBlankTicketUid() {
         assertEquals(
-                "ticketUid must not be blank",
+                "UID билета не должен быть пустым",
                 assertThrows(MockPartnerBadRequestException.class,
                         () -> service.verify("org1", new MockTicketVerifyRequest(null))).getMessage()
         );
         assertEquals(
-                "ticketUid must not be blank",
+                "UID билета не должен быть пустым",
                 assertThrows(MockPartnerBadRequestException.class,
                         () -> service.verify("org1", new MockTicketVerifyRequest(""))).getMessage()
         );
         assertEquals(
-                "ticketUid must not be blank",
+                "UID билета не должен быть пустым",
                 assertThrows(MockPartnerBadRequestException.class,
                         () -> service.verify("org1", new MockTicketVerifyRequest("   "))).getMessage()
         );
@@ -75,7 +75,7 @@ class MockTicketVerificationServiceTest {
                 () -> service.verify("org1", null)
         );
 
-        assertEquals("Request body must not be empty", ex.getMessage());
+        assertEquals("Тело запроса не должно быть пустым", ex.getMessage());
         assertNotNull(ex);
     }
 }

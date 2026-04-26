@@ -58,7 +58,7 @@ public class TicketFileStorageService {
     public TicketFilesResponse uploadTicketFiles(TicketLot ticket, List<MultipartFile> files) {
         List<MultipartFile> normalizedFiles = normalizeFiles(files);
         if (normalizedFiles.isEmpty()) {
-            throw new BusinessRuleException("At least one ticket file is required");
+            throw new BusinessRuleException("Требуется хотя бы один файл билета");
         }
 
         List<TicketFile> uploadedEntities = new ArrayList<>();
@@ -105,10 +105,10 @@ public class TicketFileStorageService {
     public TicketFileDownloadUrlResponse createSingleDownloadUrl(TicketLot ticket) {
         List<TicketFile> files = ticketFileRepository.findAllByTicketIdOrderByCreatedAtAscIdAsc(ticket.getId());
         if (files.isEmpty()) {
-            throw new NotFoundException("Ticket file not found");
+            throw new NotFoundException("Файл билета не найден");
         }
         if (files.size() > 1) {
-            throw new BusinessRuleException("Multiple ticket files are attached; use /api/tickets/{id}/files/{fileId}/download-url");
+            throw new BusinessRuleException("К билету прикреплено несколько файлов; используйте /api/tickets/{id}/files/{fileId}/download-url");
         }
         return createDownloadUrl(files.get(0));
     }
@@ -140,7 +140,7 @@ public class TicketFileStorageService {
 
     private TicketFile loadTicketFile(TicketLot ticket, Long fileId) {
         return ticketFileRepository.findByIdAndTicketId(fileId, ticket.getId())
-                .orElseThrow(() -> new NotFoundException("Ticket file not found"));
+                .orElseThrow(() -> new NotFoundException("Файл билета не найден"));
     }
 
     private TicketFileDownloadUrlResponse createDownloadUrl(TicketFile ticketFile) {
@@ -164,7 +164,7 @@ public class TicketFileStorageService {
                     ticketFile.getSizeBytes()
             );
         } catch (Exception ex) {
-            throw new TicketFileStorageException("Failed to create ticket file download URL", ex);
+            throw new TicketFileStorageException("Не удалось создать ссылку для скачивания файла билета", ex);
         }
     }
 
@@ -179,7 +179,7 @@ public class TicketFileStorageService {
                             .build()
             );
         } catch (Exception ex) {
-            throw new TicketFileStorageException("Failed to upload ticket file", ex);
+            throw new TicketFileStorageException("Не удалось загрузить файл билета", ex);
         }
     }
 
@@ -194,17 +194,17 @@ public class TicketFileStorageService {
 
     private void validate(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new BusinessRuleException("Ticket file is required");
+            throw new BusinessRuleException("Файл билета обязателен");
         }
 
         String contentType = resolveContentType(file);
         if (!ALLOWED_CONTENT_TYPES.contains(contentType)) {
-            throw new BusinessRuleException("Only PDF, PNG and JPG files are allowed");
+            throw new BusinessRuleException("Разрешены только файлы PDF, PNG и JPG");
         }
 
         String originalName = file.getOriginalFilename();
         if (!hasAllowedExtension(originalName)) {
-            throw new BusinessRuleException("Ticket file must have .pdf, .png, .jpg or .jpeg extension");
+            throw new BusinessRuleException("Файл билета должен иметь расширение .pdf, .png, .jpg или .jpeg");
         }
     }
 
@@ -216,7 +216,7 @@ public class TicketFileStorageService {
     private String safeOriginalName(MultipartFile file) {
         String originalName = file.getOriginalFilename();
         if (originalName == null || originalName.isBlank()) {
-            return "ticket" + extractExtension(originalName);
+            return "билет" + extractExtension(originalName);
         }
         return originalName;
     }

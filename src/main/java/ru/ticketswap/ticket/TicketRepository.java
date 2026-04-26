@@ -21,4 +21,6 @@ public interface TicketRepository extends JpaRepository<TicketLot, Long> {
 
     @EntityGraph(attributePaths = {"seller", "buyer", "ticketFiles"})
     List<TicketLot> findAllByBuyerIdOrderByEventDateAsc(Long buyerId);
+
+    boolean existsByEvent_Id(Long eventId);
 }

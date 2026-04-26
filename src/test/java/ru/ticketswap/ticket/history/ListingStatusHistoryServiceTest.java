@@ -35,10 +35,10 @@ class ListingStatusHistoryServiceTest {
         User seller = new User("seller@example.com", "hash");
         TicketLot ticket = new TicketLot(
                 "uid-1",
-                "Concert",
+                "Концерт",
                 LocalDateTime.now().plusDays(10),
-                "Arena",
-                "Berlin",
+                "Арена",
+                "Берлин",
                 BigDecimal.valueOf(150),
                 null,
                 null,
@@ -48,7 +48,7 @@ class ListingStatusHistoryServiceTest {
 
         when(ticketRepository.saveAndFlush(ticket)).thenReturn(ticket);
 
-        TicketLot saved = service.createListingWithInitialStatus(ticket, "Listing created", seller);
+        TicketLot saved = service.createListingWithInitialStatus(ticket, "Объявление создано", seller);
 
         assertEquals(ticket, saved);
 
@@ -58,7 +58,7 @@ class ListingStatusHistoryServiceTest {
         ListingStatusHistory history = historyCaptor.getValue();
         assertEquals(null, history.getFromStatus());
         assertEquals(TicketStatus.CREATED, history.getToStatus());
-        assertEquals("Listing created", history.getReason());
+        assertEquals("Объявление создано", history.getReason());
         assertEquals(seller, history.getChangedByUser());
         assertNotNull(history.getChangedAt());
     }
@@ -69,10 +69,10 @@ class ListingStatusHistoryServiceTest {
         User seller = new User("seller@example.com", "hash");
         TicketLot ticket = new TicketLot(
                 "uid-1",
-                "Concert",
+                "Концерт",
                 LocalDateTime.now().plusDays(10),
-                "Arena",
-                "Berlin",
+                "Арена",
+                "Берлин",
                 BigDecimal.valueOf(150),
                 null,
                 null,
@@ -82,7 +82,7 @@ class ListingStatusHistoryServiceTest {
 
         when(ticketRepository.saveAndFlush(ticket)).thenReturn(ticket);
 
-        TicketLot saved = service.transition(ticket, TicketStatus.PENDING_VALIDATION, "Validation started", null);
+        TicketLot saved = service.transition(ticket, TicketStatus.PENDING_VALIDATION, "Проверка начата", null);
 
         assertEquals(ticket, saved);
         assertEquals(TicketStatus.PENDING_VALIDATION, ticket.getStatus());
@@ -96,10 +96,10 @@ class ListingStatusHistoryServiceTest {
         User seller = new User("seller@example.com", "hash");
         TicketLot ticket = new TicketLot(
                 "uid-1",
-                "Concert",
+                "Концерт",
                 LocalDateTime.now().plusDays(10),
-                "Arena",
-                "Berlin",
+                "Арена",
+                "Берлин",
                 BigDecimal.valueOf(150),
                 null,
                 null,
@@ -107,7 +107,7 @@ class ListingStatusHistoryServiceTest {
                 seller
         );
 
-        TicketLot saved = service.transition(ticket, TicketStatus.CREATED, "No-op", seller);
+        TicketLot saved = service.transition(ticket, TicketStatus.CREATED, "Без изменений", seller);
 
         assertEquals(ticket, saved);
         verify(ticketRepository, times(0)).saveAndFlush(any());

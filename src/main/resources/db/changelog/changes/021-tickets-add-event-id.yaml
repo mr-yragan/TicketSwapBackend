@@ -1,0 +1,26 @@
+databaseChangeLog:
+  - changeSet:
+      id: 021-tickets-add-event-id
+      author: nikolay
+      changes:
+        - addColumn:
+            tableName: tickets
+            columns:
+              - column:
+                  name: event_id
+                  type: bigint
+                  constraints:
+                    nullable: true
+        - createIndex:
+            tableName: tickets
+            indexName: idx_tickets_event_id
+            columns:
+              - column:
+                  name: event_id
+        - addForeignKeyConstraint:
+            baseTableName: tickets
+            baseColumnNames: event_id
+            referencedTableName: events
+            referencedColumnNames: id
+            constraintName: fk_tickets_event
+            onDelete: RESTRICT

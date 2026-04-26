@@ -29,6 +29,6 @@ public class MockPartnerExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<MockPartnerApiError> handleMalformedJson(HttpMessageNotReadableException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(MockPartnerApiError.badRequest("Malformed JSON request"));
+                .body(MockPartnerApiError.badRequest("Некорректный JSON-запрос"));
     }
 }

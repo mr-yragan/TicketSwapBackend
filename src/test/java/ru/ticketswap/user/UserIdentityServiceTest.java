@@ -97,7 +97,7 @@ class UserIdentityServiceTest {
                 () -> userIdentityService.assertPhoneAvailable("+7 (999) 123-45-67", 42L)
         );
 
-        assertEquals("Phone number conflicts with an existing login", ex.getMessage());
+        assertEquals("Номер телефона конфликтует с существующим логином", ex.getMessage());
     }
 
     @Test

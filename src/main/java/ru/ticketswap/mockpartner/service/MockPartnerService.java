@@ -1,7 +1,7 @@
 package ru.ticketswap.mockpartner.service;
 
 import org.springframework.stereotype.Service;
-import ru.ticketswap.mockpartner.data.MockPartnerEventData;
+import ru.ticketswap.event.Event;
 import ru.ticketswap.mockpartner.data.MockPartnerDataProvider;
 import ru.ticketswap.mockpartner.dto.MockPartnerEventResponse;
 import ru.ticketswap.mockpartner.dto.MockTicketReissueRequest;
@@ -41,11 +41,12 @@ public class MockPartnerService {
         Instant now = Instant.now();
 
         return mockPartnerDataProvider.getEventsByOrganizerCode(resolvedOrganizerCode).stream()
-                .filter(event -> resolvedOrganizerCode.equals(event.organizerCode()))
-                .filter(event -> event.startsAt().isAfter(now))
+                .filter(event -> resolvedOrganizerCode.equalsIgnoreCase(event.getOrganizer().getApiKey()))
+                .filter(event -> event.getStartsAt().isAfter(now))
                 .sorted(Comparator
-                        .comparing((MockPartnerEventData event) -> event.startsAt())
-                        .thenComparing(event -> event.externalEventId()))
+                        .comparing((Event event) -> event.getStartsAt())
+                        .thenComparing(Event::getEventId, String.CASE_INSENSITIVE_ORDER)
+                        .thenComparing(Event::getId))
                 .map(mockPartnerEventMapper::toResponse)
                 .toList();
     }

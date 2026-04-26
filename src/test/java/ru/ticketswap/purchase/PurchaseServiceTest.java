@@ -31,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -55,6 +56,9 @@ class PurchaseServiceTest {
     @Mock
     private PartnerApiClient partnerApiClient;
 
+    @Mock
+    private PartnerOrganizerCodeMapper partnerOrganizerCodeMapper;
+
     private PurchaseService service;
     private User seller;
     private User buyer;
@@ -71,7 +75,7 @@ class PurchaseServiceTest {
                 transactionManager,
                 listingStatusHistoryService,
                 partnerApiClient,
-                new PartnerOrganizerCodeMapper()
+                partnerOrganizerCodeMapper
         );
 
         seller = createUser(1L, "seller@example.com");
@@ -83,6 +87,7 @@ class PurchaseServiceTest {
         when(ticketRepository.findById(1L)).thenReturn(Optional.of(listing));
         when(listingHoldRepository.findByListingId(1L)).thenReturn(Optional.empty());
         when(listingHoldRepository.saveAndFlush(any(ListingHold.class))).thenReturn(hold);
+        lenient().when(partnerOrganizerCodeMapper.resolveOrganizerCode("org1")).thenReturn(Optional.of("org1"));
         stubTransitions();
     }
 
@@ -108,10 +113,10 @@ class PurchaseServiceTest {
                 listing,
                 TicketStatus.PROCESSING,
                 TicketStatus.PROCESSING,
-                "Ticket reissued by partner",
+                "Билет перевыпущен партнёром",
                 null
         );
-        verify(listingStatusHistoryService).transition(listing, TicketStatus.COMPLETED, "Purchase completed", buyer);
+        verify(listingStatusHistoryService).transition(listing, TicketStatus.COMPLETED, "Покупка завершена", buyer);
         verify(listingHoldRepository).deleteByListingId(1L);
     }
 
@@ -123,7 +128,7 @@ class PurchaseServiceTest {
                         "TICKET-12345",
                         null,
                         "org1",
-                        "Mock reissue failed"
+                        "Mock-перевыпуск не выполнен"
                 ));
 
         TicketLot saved = service.buyNow(1L, buyer);
@@ -133,7 +138,7 @@ class PurchaseServiceTest {
         verify(listingStatusHistoryService).transition(
                 listing,
                 TicketStatus.FAILED,
-                "Partner reissue failed: Mock reissue failed",
+                "Перевыпуск у партнёра не выполнен: Mock-перевыпуск не выполнен",
                 null
         );
         verify(listingHoldRepository).deleteByListingId(1L);
@@ -142,7 +147,7 @@ class PurchaseServiceTest {
     @Test
     void buyNowFailsListingWhenPartnerIntegrationFails() {
         when(partnerApiClient.reissueTicket("org1", "TICKET-12345", "buyer@example.com"))
-                .thenThrow(new PartnerIntegrationException("boom"));
+                .thenThrow(new PartnerIntegrationException("ошибка"));
 
         TicketLot saved = service.buyNow(1L, buyer);
 
@@ -150,7 +155,7 @@ class PurchaseServiceTest {
         verify(listingStatusHistoryService).transition(
                 listing,
                 TicketStatus.FAILED,
-                "Partner reissue failed: integration error",
+                "Перевыпуск у партнёра не выполнен: ошибка интеграции",
                 null
         );
         verify(listingHoldRepository).deleteByListingId(1L);
@@ -159,6 +164,7 @@ class PurchaseServiceTest {
     @Test
     void buyNowFailsListingWithoutPartnerCallWhenOrganizerUnsupported() {
         listing.setOrganizerName("unsupported");
+        when(partnerOrganizerCodeMapper.resolveOrganizerCode("unsupported")).thenReturn(Optional.empty());
 
         TicketLot saved = service.buyNow(1L, buyer);
 
@@ -166,7 +172,7 @@ class PurchaseServiceTest {
         verify(listingStatusHistoryService).transition(
                 listing,
                 TicketStatus.FAILED,
-                "Partner reissue failed: unsupported organizer",
+                "Перевыпуск у партнёра не выполнен: организатор не поддерживается",
                 null
         );
         verify(listingHoldRepository).deleteByListingId(1L);
@@ -184,10 +190,10 @@ class PurchaseServiceTest {
     private TicketLot createListing(String uid, String organizerName) {
         return new TicketLot(
                 uid,
-                "Concert",
+                "Концерт",
                 LocalDateTime.now().plusDays(10),
-                "Arena",
-                "Moscow",
+                "Арена",
+                "Москва",
                 BigDecimal.valueOf(4999),
                 null,
                 organizerName,

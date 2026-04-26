@@ -55,7 +55,7 @@ public class AuthService {
     public void register(AuthRequest request) {
         String normalizedEmail = userIdentityService.normalizeEmail(request.email());
         if (userIdentityService.emailExists(normalizedEmail)) {
-            throw new ConflictException("Email already exists");
+            throw new ConflictException("Почта уже существует");
         }
 
         String normalizedLogin = userIdentityService.normalizeLogin(request.login());
@@ -77,14 +77,14 @@ public class AuthService {
                     new UsernamePasswordAuthenticationToken(request.identifier(), request.password())
             );
         } catch (AuthenticationException ex) {
-            throw new UnauthorizedException("Invalid credentials");
+            throw new UnauthorizedException("Неверные данные для входа");
         }
 
         User user = userIdentityService.findUserByEmail(authentication.getName())
-                .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
+                .orElseThrow(() -> new UnauthorizedException("Неверные данные для входа"));
 
         if (!user.isEmailVerified()) {
-            throw new UnauthorizedException("Email is not verified");
+            throw new UnauthorizedException("Почта не подтверждена");
         }
 
         if (!user.isTwoFactorEnabled()) {

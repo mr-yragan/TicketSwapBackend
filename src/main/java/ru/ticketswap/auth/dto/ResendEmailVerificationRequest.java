@@ -5,9 +5,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 public record ResendEmailVerificationRequest(
-        @NotBlank(message = "Email is required")
-        @Email(message = "Email must be valid")
-        @Size(max = 255, message = "Email must be at most 255 characters")
+        @NotBlank(message = "Почта обязательна")
+        @Email(message = "Почта должна быть корректной")
+        @Size(max = 255, message = "Почта должна быть не длиннее 255 символов")
         String email
 ) {
 }

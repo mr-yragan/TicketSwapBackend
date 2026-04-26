@@ -75,7 +75,7 @@ class AuthControllerTest {
 
         assertEquals(HttpStatus.ACCEPTED, response.getStatusCode());
         assertEquals(
-                "If an account with that email exists, password reset instructions have been sent",
+                "Если аккаунт с такой почтой существует, инструкция по сбросу пароля была отправлена",
                 response.getBody().message()
         );
         verify(passwordResetService).requestPasswordReset("user@example.com");
@@ -88,7 +88,7 @@ class AuthControllerTest {
         ResponseEntity<ResetPasswordResponse> response = authController.resetPassword(request);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals("Password successfully reset", response.getBody().message());
+        assertEquals("Пароль успешно сброшен", response.getBody().message());
         verify(passwordResetService).resetPassword("token-123", "new-password");
     }
 }

@@ -48,6 +48,9 @@ class ListingLifecycleServiceTest {
     @Mock
     private PartnerApiClient partnerApiClient;
 
+    @Mock
+    private PartnerOrganizerCodeMapper partnerOrganizerCodeMapper;
+
     private ListingLifecycleService service;
 
     @BeforeEach
@@ -60,7 +63,7 @@ class ListingLifecycleServiceTest {
                 transactionManager,
                 listingStatusHistoryService,
                 partnerApiClient,
-                new PartnerOrganizerCodeMapper(),
+                partnerOrganizerCodeMapper,
                 clock
         );
     }
@@ -70,14 +73,15 @@ class ListingLifecycleServiceTest {
         TicketLot listing = createListing("org1", LocalDateTime.of(2031, 8, 21, 12, 0));
 
         when(ticketRepository.findById(1L)).thenReturn(Optional.of(listing));
+        when(partnerOrganizerCodeMapper.resolveOrganizerCode("org1")).thenReturn(Optional.of("org1"));
         when(partnerApiClient.verifyTicket("org1", "uid-1"))
                 .thenReturn(new PartnerTicketVerifyResponse(true, "uid-1", "org1", null));
         stubTransitions();
 
         TicketLot saved = service.validateListing(1L);
 
-        verify(listingStatusHistoryService).transition(listing, TicketStatus.PENDING_VALIDATION, "Validation started", null);
-        verify(listingStatusHistoryService).transition(listing, TicketStatus.PENDING_RECIPIENT, "Partner validation passed", null);
+        verify(listingStatusHistoryService).transition(listing, TicketStatus.PENDING_VALIDATION, "Проверка начата", null);
+        verify(listingStatusHistoryService).transition(listing, TicketStatus.PENDING_RECIPIENT, "Проверка партнёра пройдена", null);
         verify(partnerApiClient).verifyTicket("org1", "uid-1");
         assertEquals(TicketStatus.PENDING_RECIPIENT, listing.getStatus());
         assertEquals(listing, saved);
@@ -88,28 +92,30 @@ class ListingLifecycleServiceTest {
         TicketLot listing = createListing("org1", LocalDateTime.of(2031, 8, 21, 12, 0));
 
         when(ticketRepository.findById(1L)).thenReturn(Optional.of(listing));
+        when(partnerOrganizerCodeMapper.resolveOrganizerCode("org1")).thenReturn(Optional.of("org1"));
         when(partnerApiClient.verifyTicket("org1", "uid-1"))
-                .thenReturn(new PartnerTicketVerifyResponse(false, "uid-1", "org1", "Ticket already used"));
+                .thenReturn(new PartnerTicketVerifyResponse(false, "uid-1", "org1", "Билет уже использован"));
         stubTransitions();
 
         service.validateListing(1L);
 
-        verify(listingStatusHistoryService).transition(listing, TicketStatus.PENDING_VALIDATION, "Validation started", null);
-        verify(listingStatusHistoryService).transition(listing, TicketStatus.FAILED, "Ticket already used", null);
+        verify(listingStatusHistoryService).transition(listing, TicketStatus.PENDING_VALIDATION, "Проверка начата", null);
+        verify(listingStatusHistoryService).transition(listing, TicketStatus.FAILED, "Билет уже использован", null);
         verify(partnerApiClient).verifyTicket("org1", "uid-1");
         assertEquals(TicketStatus.FAILED, listing.getStatus());
     }
 
     @Test
     void unsupportedOrganizerFailsWithoutPartnerCall() {
-        TicketLot listing = createListing("amazing organizer", LocalDateTime.of(2031, 8, 21, 12, 0));
+        TicketLot listing = createListing("неизвестный организатор", LocalDateTime.of(2031, 8, 21, 12, 0));
 
         when(ticketRepository.findById(1L)).thenReturn(Optional.of(listing));
+        when(partnerOrganizerCodeMapper.resolveOrganizerCode("неизвестный организатор")).thenReturn(Optional.empty());
         stubTransitions();
 
         service.validateListing(1L);
 
-        verify(listingStatusHistoryService).transition(listing, TicketStatus.FAILED, "Partner validation failed: unsupported organizer", null);
+        verify(listingStatusHistoryService).transition(listing, TicketStatus.FAILED, "Проверка партнёра не пройдена: организатор не поддерживается", null);
         verify(partnerApiClient, times(0)).verifyTicket(any(), any());
         assertEquals(TicketStatus.FAILED, listing.getStatus());
     }
@@ -126,7 +132,7 @@ class ListingLifecycleServiceTest {
         verify(listingStatusHistoryService).transition(
                 listing,
                 TicketStatus.FAILED,
-                "Validation failed: event date is in the past",
+                "Проверка не пройдена: дата мероприятия уже прошла",
                 null
         );
         verify(partnerApiClient, never()).verifyTicket(any(), any());
@@ -138,13 +144,14 @@ class ListingLifecycleServiceTest {
         TicketLot listing = createListing("org1", LocalDateTime.of(2031, 8, 21, 12, 0));
 
         when(ticketRepository.findById(1L)).thenReturn(Optional.of(listing));
+        when(partnerOrganizerCodeMapper.resolveOrganizerCode("org1")).thenReturn(Optional.of("org1"));
         when(partnerApiClient.verifyTicket("org1", "uid-1"))
-                .thenThrow(new PartnerIntegrationException("boom"));
+                .thenThrow(new PartnerIntegrationException("ошибка"));
         stubTransitions();
 
         service.validateListing(1L);
 
-        verify(listingStatusHistoryService).transition(listing, TicketStatus.FAILED, "Partner validation failed: integration error", null);
+        verify(listingStatusHistoryService).transition(listing, TicketStatus.FAILED, "Проверка партнёра не пройдена: ошибка интеграции", null);
         assertEquals(TicketStatus.FAILED, listing.getStatus());
     }
 
@@ -161,10 +168,10 @@ class ListingLifecycleServiceTest {
         User seller = new User("seller@example.com", "hash");
         return new TicketLot(
                 "uid-1",
-                "Concert",
+                "Концерт",
                 eventDate,
-                "Arena",
-                "Berlin",
+                "Арена",
+                "Берлин",
                 BigDecimal.valueOf(150),
                 null,
                 organizerName,

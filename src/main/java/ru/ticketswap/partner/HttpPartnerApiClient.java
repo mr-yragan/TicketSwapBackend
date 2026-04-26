@@ -32,16 +32,16 @@ public class HttpPartnerApiClient implements PartnerApiClient {
 
             return validateResponse(response);
         } catch (HttpClientErrorException.BadRequest ex) {
-            throw new PartnerIntegrationException("Partner API returned 400 Bad Request", ex);
+            throw new PartnerIntegrationException("API партнёра вернул 400 Некорректный запрос", ex);
         } catch (HttpClientErrorException.NotFound ex) {
-            throw new PartnerIntegrationException("Partner API returned 404 Not Found", ex);
+            throw new PartnerIntegrationException("API партнёра вернул 404 Не найдено", ex);
         } catch (HttpStatusCodeException ex) {
             throw new PartnerIntegrationException(
-                    "Partner API returned unexpected status: " + ex.getStatusCode().value(),
+                    "API партнёра вернул неожиданный статус: " + ex.getStatusCode().value(),
                     ex
             );
         } catch (RestClientException ex) {
-            throw new PartnerIntegrationException("Partner API request failed", ex);
+            throw new PartnerIntegrationException("Запрос к API партнёра не выполнен", ex);
         }
     }
 
@@ -61,50 +61,50 @@ public class HttpPartnerApiClient implements PartnerApiClient {
 
             return validateReissueResponse(response);
         } catch (HttpClientErrorException.BadRequest ex) {
-            throw new PartnerIntegrationException("Partner API returned 400 Bad Request", ex);
+            throw new PartnerIntegrationException("API партнёра вернул 400 Некорректный запрос", ex);
         } catch (HttpClientErrorException.NotFound ex) {
-            throw new PartnerIntegrationException("Partner API returned 404 Not Found", ex);
+            throw new PartnerIntegrationException("API партнёра вернул 404 Не найдено", ex);
         } catch (HttpStatusCodeException ex) {
             throw new PartnerIntegrationException(
-                    "Partner API returned unexpected status: " + ex.getStatusCode().value(),
+                    "API партнёра вернул неожиданный статус: " + ex.getStatusCode().value(),
                     ex
             );
         } catch (RestClientException ex) {
-            throw new PartnerIntegrationException("Partner API request failed", ex);
+            throw new PartnerIntegrationException("Запрос к API партнёра не выполнен", ex);
         }
     }
 
     private void validateRequiredArgument(String name, String value) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
+            throw new IllegalArgumentException(name + " не должен быть пустым");
         }
     }
 
     private PartnerTicketVerifyResponse validateResponse(PartnerTicketVerifyResponse response) {
         if (response == null) {
-            throw new PartnerIntegrationException("Partner API returned empty body");
+            throw new PartnerIntegrationException("API партнёра вернул пустое тело ответа");
         }
         if (response.ticketUid() == null || response.ticketUid().isBlank()) {
-            throw new PartnerIntegrationException("Partner API returned invalid ticketUid");
+            throw new PartnerIntegrationException("API партнёра вернул некорректный UID билета");
         }
         if (response.organizerCode() == null || response.organizerCode().isBlank()) {
-            throw new PartnerIntegrationException("Partner API returned invalid organizerCode");
+            throw new PartnerIntegrationException("API партнёра вернул некорректный код организатора");
         }
         return response;
     }
 
     private PartnerTicketReissueResponse validateReissueResponse(PartnerTicketReissueResponse response) {
         if (response == null) {
-            throw new PartnerIntegrationException("Partner API returned empty body");
+            throw new PartnerIntegrationException("API партнёра вернул пустое тело ответа");
         }
         if (response.originalTicketUid() == null || response.originalTicketUid().isBlank()) {
-            throw new PartnerIntegrationException("Partner API returned invalid originalTicketUid");
+            throw new PartnerIntegrationException("API партнёра вернул некорректный UID исходного билета");
         }
         if (response.organizerCode() == null || response.organizerCode().isBlank()) {
-            throw new PartnerIntegrationException("Partner API returned invalid organizerCode");
+            throw new PartnerIntegrationException("API партнёра вернул некорректный код организатора");
         }
         if (response.success() && (response.newTicketUid() == null || response.newTicketUid().isBlank())) {
-            throw new PartnerIntegrationException("Partner API returned invalid newTicketUid");
+            throw new PartnerIntegrationException("API партнёра вернул некорректный UID нового билета");
         }
         return response;
     }

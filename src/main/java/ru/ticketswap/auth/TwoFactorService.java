@@ -46,7 +46,6 @@ public class TwoFactorService {
                 expiresAt
         ));
 
-        return new PendingTwoFactorChallenge(challengeId, code, expiresAt);
         return new PendingTwoFactorChallenge(challengeId, user.getEmail(), code, expiresAt);
     }
 
@@ -57,15 +56,15 @@ public class TwoFactorService {
     public PendingTwoFactorChallenge resendChallenge(String challengeId) {
         Instant now = Instant.now();
         TwoFactorChallenge challenge = challengeRepository.findForUpdateByChallengeId(challengeId)
-                .orElseThrow(() -> new UnauthorizedException("2FA confirmation is invalid or expired"));
+                .orElseThrow(() -> new UnauthorizedException("Подтверждение 2FA недействительно или истекло"));
 
         if (challenge.isConsumed()) {
-            throw new UnauthorizedException("2FA confirmation is invalid or expired");
+            throw new UnauthorizedException("Подтверждение 2FA недействительно или истекло");
         }
 
         if (challenge.isExpired(now)) {
             challenge.markConsumed(now);
-            throw new ExpiredTwoFactorCodeException("2FA code expired");
+            throw new ExpiredTwoFactorCodeException("Срок действия кода 2FA истёк");
         }
 
         challenge.markConsumed(now);
@@ -80,15 +79,15 @@ public class TwoFactorService {
     public User verifyCode(String challengeId, String code) {
         Instant now = Instant.now();
         TwoFactorChallenge challenge = challengeRepository.findForUpdateByChallengeId(challengeId)
-                .orElseThrow(() -> new UnauthorizedException("2FA confirmation is invalid or expired"));
+                .orElseThrow(() -> new UnauthorizedException("Подтверждение 2FA недействительно или истекло"));
 
         if (challenge.isConsumed()) {
-            throw new UnauthorizedException("2FA confirmation is invalid or expired");
+            throw new UnauthorizedException("Подтверждение 2FA недействительно или истекло");
         }
 
         if (challenge.isExpired(now)) {
             challenge.markConsumed(now);
-            throw new ExpiredTwoFactorCodeException("2FA code expired");
+            throw new ExpiredTwoFactorCodeException("Срок действия кода 2FA истёк");
         }
 
         if (!passwordEncoder.matches(code, challenge.getCodeHash())) {
@@ -96,7 +95,7 @@ public class TwoFactorService {
             if (attempts >= maxAttempts) {
                 challenge.markConsumed(now);
             }
-            throw new InvalidTwoFactorCodeException("Invalid 2FA code");
+            throw new InvalidTwoFactorCodeException("Неверный код 2FA");
         }
 
         challenge.markConsumed(now);

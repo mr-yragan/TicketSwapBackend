@@ -138,7 +138,6 @@ class AuthServiceTest {
         when(authentication.getName()).thenReturn("user@example.com");
         when(userIdentityService.findUserByEmail("user@example.com")).thenReturn(Optional.of(user));
         when(twoFactorService.createChallenge(user))
-                .thenReturn(new TwoFactorService.PendingTwoFactorChallenge("challenge-123", "654321", expiresAt));
                 .thenReturn(new TwoFactorService.PendingTwoFactorChallenge(
                 "challenge-123",
                 "user@example.com",

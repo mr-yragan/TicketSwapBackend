@@ -23,7 +23,7 @@ public record LoginResponse(
                 null,
                 challengeId,
                 expiresAt,
-                "Confirmation code sent to email"
+                "Код подтверждения отправлен на почту"
         );
     }
 }

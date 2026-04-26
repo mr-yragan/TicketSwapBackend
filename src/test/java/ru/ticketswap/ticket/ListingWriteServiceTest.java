@@ -31,10 +31,10 @@ class ListingWriteServiceTest {
         User buyer = new User("buyer@example.com", "hash");
         TicketLot listing = new TicketLot(
                 "uid-1",
-                "Concert",
+                "Концерт",
                 LocalDateTime.now().plusDays(10),
-                "Arena",
-                "Berlin",
+                "Арена",
+                "Берлин",
                 BigDecimal.valueOf(150),
                 null,
                 "org1",
@@ -68,10 +68,10 @@ class ListingWriteServiceTest {
         User seller = new User("seller@example.com", "hash");
         TicketLot listing = new TicketLot(
                 "uid-1",
-                "Concert",
+                "Концерт",
                 LocalDateTime.now().plusDays(10),
-                "Arena",
-                "Berlin",
+                "Арена",
+                "Берлин",
                 BigDecimal.valueOf(150),
                 null,
                 "org1",

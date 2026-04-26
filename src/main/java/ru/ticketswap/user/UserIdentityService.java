@@ -43,18 +43,18 @@ public class UserIdentityService {
 
         String normalized = login.trim();
         if (normalized.isEmpty()) {
-            throw new IllegalArgumentException("Login must not be blank");
+            throw new IllegalArgumentException("Логин не должен быть пустым");
         }
         if (normalized.contains("@")) {
-            throw new IllegalArgumentException("Login must not look like an email");
+            throw new IllegalArgumentException("Логин не должен выглядеть как почта");
         }
         if (!LOGIN_PATTERN.matcher(normalized).matches()) {
             throw new IllegalArgumentException(
-                    "Login may contain only letters, digits, underscore, dot and dash, and must be between 3 and 32 characters"
+                    "Логин может содержать только буквы, цифры, нижнее подчёркивание, точку и дефис, длина от 3 до 32 символов"
             );
         }
         if (PHONE_LIKE_LOGIN_PATTERN.matcher(normalized).matches() || isPhoneLike(normalized)) {
-            throw new IllegalArgumentException("Login must not look like a phone number");
+            throw new IllegalArgumentException("Логин не должен выглядеть как номер телефона");
         }
         return normalized;
     }
@@ -66,15 +66,15 @@ public class UserIdentityService {
 
         String trimmed = phoneNumber.trim();
         if (!trimmed.matches(PHONE_CHARS_REGEX)) {
-            throw new IllegalArgumentException("Phone number has invalid characters");
+            throw new IllegalArgumentException("Номер телефона содержит недопустимые символы");
         }
 
         String digits = trimmed.replaceAll(DIGITS_ONLY_REGEX, "");
         if (digits.isEmpty()) {
-            throw new IllegalArgumentException("Phone number must contain digits");
+            throw new IllegalArgumentException("Номер телефона должен содержать цифры");
         }
         if (digits.length() < 5 || digits.length() > 32) {
-            throw new IllegalArgumentException("Phone number must contain between 5 and 32 digits");
+            throw new IllegalArgumentException("Номер телефона должен содержать от 5 до 32 цифр");
         }
         return "+" + digits;
     }
@@ -83,9 +83,9 @@ public class UserIdentityService {
         User user;
         try {
             user = findUserByIdentifier(identifier)
-                    .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+                    .orElseThrow(() -> new UsernameNotFoundException("Пользователь не найден"));
         } catch (DuplicateUserIdentityException ex) {
-            throw new UsernameNotFoundException("User not found", ex);
+            throw new UsernameNotFoundException("Пользователь не найден", ex);
         }
 
         return toUserDetails(user);
@@ -95,9 +95,9 @@ public class UserIdentityService {
         User user;
         try {
             user = findUserByEmail(email)
-                    .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+                    .orElseThrow(() -> new UsernameNotFoundException("Пользователь не найден"));
         } catch (DuplicateUserIdentityException ex) {
-            throw new UsernameNotFoundException("User not found", ex);
+            throw new UsernameNotFoundException("Пользователь не найден", ex);
         }
 
         return toUserDetails(user);
@@ -129,13 +129,13 @@ public class UserIdentityService {
         userRepository.findByLogin(normalizedLogin)
                 .filter(other -> isDifferentUser(other, currentUserId))
                 .ifPresent(other -> {
-                    throw new ConflictException("Login already in use");
+                    throw new ConflictException("Логин уже используется");
                 });
 
         userRepository.findByPhoneNumber(normalizedLogin)
                 .filter(other -> isDifferentUser(other, currentUserId))
                 .ifPresent(other -> {
-                    throw new ConflictException("Login conflicts with an existing phone number");
+                    throw new ConflictException("Логин конфликтует с существующим номером телефона");
                 });
     }
 
@@ -145,13 +145,13 @@ public class UserIdentityService {
         userRepository.findByPhoneNumber(normalizedPhone)
                 .filter(other -> isDifferentUser(other, currentUserId))
                 .ifPresent(other -> {
-                    throw new ConflictException("Phone number already in use");
+                    throw new ConflictException("Номер телефона уже используется");
                 });
 
         userRepository.findByLogin(normalizedPhone)
                 .filter(other -> isDifferentUser(other, currentUserId))
                 .ifPresent(other -> {
-                    throw new ConflictException("Phone number conflicts with an existing login");
+                    throw new ConflictException("Номер телефона конфликтует с существующим логином");
                 });
     }
 
@@ -199,7 +199,7 @@ public class UserIdentityService {
             return Optional.empty();
         }
         if (users.size() > 1) {
-            log.error("Multiple users found for {}", source);
+            log.error("Найдено несколько пользователей для {}", source);
             throw new DuplicateUserIdentityException(source);
         }
         return Optional.of(users.get(0));

@@ -1,0 +1,47 @@
+databaseChangeLog:
+  - logicalFilePath: changes/022-admin-user.yaml
+
+  - changeSet:
+      id: 022-insert-admin-user
+      author: nikolay
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - sqlCheck:
+            expectedResult: "0"
+            sql: |
+              SELECT COUNT(*)
+              FROM users
+              WHERE role = 'ADMIN'
+        - sqlCheck:
+            expectedResult: "0"
+            sql: |
+              SELECT COUNT(*)
+              FROM users
+              WHERE email = 'ticketswap_admin@yandex.ru'
+                 OR login = 'admin_mock'
+      changes:
+        - insert:
+            tableName: users
+            columns:
+              - column:
+                  name: email
+                  value: ticketswap_admin@yandex.ru
+              - column:
+                  name: login
+                  value: admin_mock
+              - column:
+                  name: password_hash
+                  value: $2a$10$oJAFHPCSl8LpJgy1fAM6IOg/hd4py3oq5Flv7jajZLJfsrjPOsg96
+              - column:
+                  name: role
+                  value: ADMIN
+              - column:
+                  name: email_verified
+                  valueBoolean: true
+              - column:
+                  name: two_factor_enabled
+                  valueBoolean: false
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP

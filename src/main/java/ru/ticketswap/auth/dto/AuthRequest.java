@@ -6,21 +6,21 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record AuthRequest(
-        @NotBlank(message = "Email is required")
-        @Email(message = "Email must be valid")
-        @Size(max = 255, message = "Email must be at most 255 characters")
+        @NotBlank(message = "Почта обязательна")
+        @Email(message = "Почта должна быть корректной")
+        @Size(max = 255, message = "Почта должна быть не длиннее 255 символов")
         String email,
 
-        @NotBlank(message = "Login is required")
-        @Size(min = 3, max = 32, message = "Login must be between 3 and 32 characters")
+        @NotBlank(message = "Логин обязателен")
+        @Size(min = 3, max = 32, message = "Логин должен быть от 3 до 32 символов")
         @Pattern(
                 regexp = "^(?!.*@)(?![0-9-]{5,32}$)[A-Za-z0-9_.-]+$",
-                message = "Login may contain only letters, digits, underscore, dot and dash, and must not look like an email or phone number"
+                message = "Логин может содержать только буквы, цифры, нижнее подчёркивание, точку и дефис, а также не должен выглядеть как почта или номер телефона"
         )
         String login,
 
-        @NotBlank(message = "Password is required")
-        @Size(min = 8, max = 72, message = "Password must be between 8 and 72 characters")
+        @NotBlank(message = "Пароль обязателен")
+        @Size(min = 8, max = 72, message = "Пароль должен быть от 8 до 72 символов")
         String password
 ) {
 }

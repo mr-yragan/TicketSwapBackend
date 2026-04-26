@@ -10,11 +10,11 @@ public class MockTicketVerificationService {
 
     private static final int VALIDATION_BUCKETS = 100;
     private static final int VALID_THRESHOLD = 85;
-    private static final String INVALID_REASON = "Mock validation failed";
+    private static final String INVALID_REASON = "Mock-проверка не пройдена";
 
     public MockTicketVerifyResponse verify(String organizerCode, MockTicketVerifyRequest request) {
         if (request == null) {
-            throw new MockPartnerBadRequestException("Request body must not be empty");
+            throw new MockPartnerBadRequestException("Тело запроса не должно быть пустым");
         }
 
         String ticketUid = request.ticketUid();
@@ -31,13 +31,13 @@ public class MockTicketVerificationService {
 
     private void validateTicketUid(String ticketUid) {
         if (ticketUid == null) {
-            throw new MockPartnerBadRequestException("ticketUid must not be blank");
+            throw new MockPartnerBadRequestException("UID билета не должен быть пустым");
         }
         if (ticketUid.isEmpty()) {
-            throw new MockPartnerBadRequestException("ticketUid must not be blank");
+            throw new MockPartnerBadRequestException("UID билета не должен быть пустым");
         }
         if (ticketUid.isBlank()) {
-            throw new MockPartnerBadRequestException("ticketUid must not be blank");
+            throw new MockPartnerBadRequestException("UID билета не должен быть пустым");
         }
     }
 }

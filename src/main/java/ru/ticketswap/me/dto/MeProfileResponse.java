@@ -9,6 +9,7 @@ public record MeProfileResponse(
         String login,
         String phoneNumber,
         String role,
+        boolean twoFactorEnabled,
         Instant createdAt
 ) {
 }

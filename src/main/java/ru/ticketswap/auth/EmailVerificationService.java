@@ -63,20 +63,20 @@ public class EmailVerificationService {
         Instant now = Instant.now();
         String normalizedToken = token == null ? "" : token.trim();
         if (normalizedToken.isBlank()) {
-            throw new IllegalArgumentException("Email verification token is invalid or already used");
+            throw new IllegalArgumentException("Токен подтверждения почты недействителен или уже использован");
         }
 
         EmailVerificationToken verificationToken = emailVerificationTokenRepository
                 .findForUpdateByTokenHash(hashToken(normalizedToken))
-                .orElseThrow(() -> new IllegalArgumentException("Email verification token is invalid or already used"));
+                .orElseThrow(() -> new IllegalArgumentException("Токен подтверждения почты недействителен или уже использован"));
 
         if (verificationToken.isConsumed()) {
-            throw new IllegalArgumentException("Email verification token is invalid or already used");
+            throw new IllegalArgumentException("Токен подтверждения почты недействителен или уже использован");
         }
 
         if (verificationToken.isExpired(now)) {
             verificationToken.markConsumed(now);
-            throw new IllegalArgumentException("Email verification token expired");
+            throw new IllegalArgumentException("Срок действия токена подтверждения почты истёк");
         }
 
         User user = verificationToken.getUser();
@@ -84,14 +84,14 @@ public class EmailVerificationService {
         verificationToken.markConsumed(now);
         emailVerificationTokenRepository.invalidateActiveTokens(user.getId(), now);
 
-        return new EmailVerificationResponse("Email successfully verified");
+        return new EmailVerificationResponse("Почта успешно подтверждена");
     }
 
     @Transactional
     public EmailVerificationResponse resendVerification(String email) {
         String normalizedEmail = userIdentityService.normalizeEmail(email);
         if (normalizedEmail == null || normalizedEmail.isBlank()) {
-            return new EmailVerificationResponse("If an unverified account with that email exists, a verification email has been sent");
+            return new EmailVerificationResponse("Если неподтверждённый аккаунт с такой почтой существует, письмо для подтверждения было отправлено");
         }
 
         userIdentityService.findUserByEmail(normalizedEmail).ifPresent(user -> {
@@ -100,7 +100,7 @@ public class EmailVerificationService {
             }
         });
 
-        return new EmailVerificationResponse("If an unverified account with that email exists, a verification email has been sent");
+        return new EmailVerificationResponse("Если неподтверждённый аккаунт с такой почтой существует, письмо для подтверждения было отправлено");
     }
 
     private String generateToken() {
@@ -114,7 +114,7 @@ public class EmailVerificationService {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             return HexFormat.of().formatHex(digest.digest(token.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("SHA-256 is not available", ex);
+            throw new IllegalStateException("SHA-256 недоступен", ex);
         }
     }
 }

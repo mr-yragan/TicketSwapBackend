@@ -73,7 +73,7 @@ class JwtAuthenticationFilterTest {
 
         when(jwtService.extractEmail("valid-token")).thenReturn("user@example.com");
         when(userIdentityService.loadUserDetailsByEmail("user@example.com"))
-                .thenThrow(new UsernameNotFoundException("User not found"));
+                .thenThrow(new UsernameNotFoundException("Пользователь не найден"));
 
         jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
 

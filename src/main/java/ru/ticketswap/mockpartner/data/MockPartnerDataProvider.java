@@ -1,26 +1,34 @@
 package ru.ticketswap.mockpartner.data;
 
 import org.springframework.stereotype.Component;
+import ru.ticketswap.event.Event;
+import ru.ticketswap.event.EventRepository;
+import ru.ticketswap.organizer.OrganizerRepository;
 
 import java.util.List;
-import java.util.Set;
 
 @Component
 public class MockPartnerDataProvider {
 
-    private static final Set<String> SUPPORTED_ORGANIZER_CODES = Set.of("org1", "org2");
+    private final OrganizerRepository organizerRepository;
+    private final EventRepository eventRepository;
 
-    public boolean isSupportedOrganizer(String organizerCode) {
-        return organizerCode != null && SUPPORTED_ORGANIZER_CODES.contains(organizerCode);
+    public MockPartnerDataProvider(OrganizerRepository organizerRepository, EventRepository eventRepository) {
+        this.organizerRepository = organizerRepository;
+        this.eventRepository = eventRepository;
     }
 
-    public List<MockPartnerEventData> getEventsByOrganizerCode(String organizerCode) {
+    public boolean isSupportedOrganizer(String organizerCode) {
+        return organizerCode != null
+                && !organizerCode.isBlank()
+                && organizerRepository.existsByApiKeyIgnoreCase(organizerCode.trim());
+    }
+
+    public List<Event> getEventsByOrganizerCode(String organizerCode) {
         if (!isSupportedOrganizer(organizerCode)) {
             return List.of();
         }
 
-        return MockPartnerCatalog.events().stream()
-                .filter(event -> organizerCode.equals(event.organizerCode()))
-                .toList();
+        return eventRepository.findAllByOrganizerApiKeyIgnoreCaseOrderByStartsAtAscIdAsc(organizerCode.trim());
     }
 }

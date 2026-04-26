@@ -1,0 +1,274 @@
+databaseChangeLog:
+  - changeSet:
+      id: 020-create-organizers-venues-events
+      author: nikolay
+      changes:
+        - createTable:
+            tableName: organizers
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: api_key
+                  type: varchar(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: contact_email
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: organizers
+            columnNames: api_key
+            constraintName: uq_organizers_api_key
+        - addUniqueConstraint:
+            tableName: organizers
+            columnNames: contact_email
+            constraintName: uq_organizers_contact_email
+        - createTable:
+            tableName: venues
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: address
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: timezone
+                  type: varchar(64)
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: venues
+            columnNames: name, address, timezone
+            constraintName: uq_venues_name_address_timezone
+        - createTable:
+            tableName: events
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: event_id
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: venue_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: organizer_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: starts_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: date
+                  type: date
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: events
+            baseColumnNames: venue_id
+            referencedTableName: venues
+            referencedColumnNames: id
+            constraintName: fk_events_venue
+        - addForeignKeyConstraint:
+            baseTableName: events
+            baseColumnNames: organizer_id
+            referencedTableName: organizers
+            referencedColumnNames: id
+            constraintName: fk_events_organizer
+        - addUniqueConstraint:
+            tableName: events
+            columnNames: organizer_id, event_id
+            constraintName: uq_events_organizer_event_id
+        - createIndex:
+            tableName: events
+            indexName: idx_events_organizer_starts_at
+            columns:
+              - column:
+                  name: organizer_id
+              - column:
+                  name: starts_at
+              - column:
+                  name: id
+
+  - changeSet:
+      id: 020-seed-mock-organizers-events
+      author: nikolay
+      changes:
+        - insert:
+            tableName: organizers
+            columns:
+              - column:
+                  name: name
+                  value: Mock Organizer One
+              - column:
+                  name: api_key
+                  value: org1
+              - column:
+                  name: contact_email
+                  value: ticketswap_organizer@yandex.ru
+        - insert:
+            tableName: organizers
+            columns:
+              - column:
+                  name: name
+                  value: Mock Organizer Two
+              - column:
+                  name: api_key
+                  value: org2
+              - column:
+                  name: contact_email
+                  value: ticketswap_org2@yandex.ru
+        - insert:
+            tableName: venues
+            columns:
+              - column:
+                  name: name
+                  value: ВТБ Арена
+              - column:
+                  name: address
+                  value: Москва, Ленинградский проспект
+              - column:
+                  name: timezone
+                  value: Europe/Moscow
+        - insert:
+            tableName: venues
+            columns:
+              - column:
+                  name: name
+                  value: МТС Live Холл
+              - column:
+                  name: address
+                  value: Москва, шоссе Энтузиастов
+              - column:
+                  name: timezone
+                  value: Europe/Moscow
+        - insert:
+            tableName: venues
+            columns:
+              - column:
+                  name: name
+                  value: Приморская сцена Open Air
+              - column:
+                  name: address
+                  value: Сочи, Приморская набережная
+              - column:
+                  name: timezone
+                  value: Europe/Moscow
+        - insert:
+            tableName: venues
+            columns:
+              - column:
+                  name: name
+                  value: Газпром Арена
+              - column:
+                  name: address
+                  value: Санкт Петербург, Футбольная аллея
+              - column:
+                  name: timezone
+                  value: Europe/Moscow
+        - insert:
+            tableName: venues
+            columns:
+              - column:
+                  name: name
+                  value: СКА Арена
+              - column:
+                  name: address
+                  value: Санкт Петербург, проспект Юрия Гагарина
+              - column:
+                  name: timezone
+                  value: Europe/Moscow
+        - insert:
+            tableName: venues
+            columns:
+              - column:
+                  name: name
+                  value: Казань Экспо
+              - column:
+                  name: address
+                  value: Казань, Выставочная улица
+              - column:
+                  name: timezone
+                  value: Europe/Moscow
+        - sql:
+            dbms: postgresql
+            splitStatements: true
+            stripComments: true
+            sql: |
+              INSERT INTO events (event_id, name, venue_id, organizer_id, starts_at, date)
+              SELECT '1001', 'Концерт Imagine Dragons', v.id, o.id, TIMESTAMPTZ '2030-09-10 16:00:00+00', DATE '2030-09-10'
+              FROM venues v, organizers o
+              WHERE v.name = 'ВТБ Арена' AND v.address = 'Москва, Ленинградский проспект' AND v.timezone = 'Europe/Moscow'
+                AND o.api_key = 'org1';
+
+              INSERT INTO events (event_id, name, venue_id, organizer_id, starts_at, date)
+              SELECT '1002', 'Концерт Arctic Monkeys', v.id, o.id, TIMESTAMPTZ '2030-11-22 18:30:00+00', DATE '2030-11-22'
+              FROM venues v, organizers o
+              WHERE v.name = 'МТС Live Холл' AND v.address = 'Москва, шоссе Энтузиастов' AND v.timezone = 'Europe/Moscow'
+                AND o.api_key = 'org1';
+
+              INSERT INTO events (event_id, name, venue_id, organizer_id, starts_at, date)
+              SELECT '1003', 'Фестиваль Кино под звездами', v.id, o.id, TIMESTAMPTZ '2031-06-15 17:00:00+00', DATE '2031-06-15'
+              FROM venues v, organizers o
+              WHERE v.name = 'Приморская сцена Open Air' AND v.address = 'Сочи, Приморская набережная' AND v.timezone = 'Europe/Moscow'
+                AND o.api_key = 'org1';
+
+              INSERT INTO events (event_id, name, venue_id, organizer_id, starts_at, date)
+              SELECT '2001', 'Мировой тур Coldplay', v.id, o.id, TIMESTAMPTZ '2030-10-04 19:00:00+00', DATE '2030-10-04'
+              FROM venues v, organizers o
+              WHERE v.name = 'Газпром Арена' AND v.address = 'Санкт Петербург, Футбольная аллея' AND v.timezone = 'Europe/Moscow'
+                AND o.api_key = 'org2';
+
+              INSERT INTO events (event_id, name, venue_id, organizer_id, starts_at, date)
+              SELECT '2002', 'Вечерний концерт The Weeknd', v.id, o.id, TIMESTAMPTZ '2031-02-14 20:15:00+00', DATE '2031-02-14'
+              FROM venues v, organizers o
+              WHERE v.name = 'СКА Арена' AND v.address = 'Санкт Петербург, проспект Юрия Гагарина' AND v.timezone = 'Europe/Moscow'
+                AND o.api_key = 'org2';
+
+              INSERT INTO events (event_id, name, venue_id, organizer_id, starts_at, date)
+              SELECT '2003', 'Музыкальная выставка Звук будущего', v.id, o.id, TIMESTAMPTZ '2031-08-29 09:45:00+00', DATE '2031-08-29'
+              FROM venues v, organizers o
+              WHERE v.name = 'Казань Экспо' AND v.address = 'Казань, Выставочная улица' AND v.timezone = 'Europe/Moscow'
+                AND o.api_key = 'org2';

@@ -37,23 +37,23 @@ class MockTicketReissueServiceTest {
 
         assertEquals(false, response.success());
         assertNull(response.newTicketUid());
-        assertEquals("Mock reissue failed", response.reason());
+        assertEquals("Mock-перевыпуск не выполнен", response.reason());
     }
 
     @Test
     void reissueRejectsNullEmptyAndBlankOriginalTicketUid() {
         assertEquals(
-                "originalTicketUid must not be blank",
+                "UID исходного билета не должен быть пустым",
                 assertThrows(MockPartnerBadRequestException.class,
                         () -> service.reissue("org1", new MockTicketReissueRequest(null, "buyer@example.com"))).getMessage()
         );
         assertEquals(
-                "originalTicketUid must not be blank",
+                "UID исходного билета не должен быть пустым",
                 assertThrows(MockPartnerBadRequestException.class,
                         () -> service.reissue("org1", new MockTicketReissueRequest("", "buyer@example.com"))).getMessage()
         );
         assertEquals(
-                "originalTicketUid must not be blank",
+                "UID исходного билета не должен быть пустым",
                 assertThrows(MockPartnerBadRequestException.class,
                         () -> service.reissue("org1", new MockTicketReissueRequest("   ", "buyer@example.com"))).getMessage()
         );
@@ -62,17 +62,17 @@ class MockTicketReissueServiceTest {
     @Test
     void reissueRejectsNullEmptyAndBlankBuyerEmail() {
         assertEquals(
-                "buyerEmail must not be blank",
+                "Почта покупателя не должна быть пустой",
                 assertThrows(MockPartnerBadRequestException.class,
                         () -> service.reissue("org1", new MockTicketReissueRequest("TICKET-12345", null))).getMessage()
         );
         assertEquals(
-                "buyerEmail must not be blank",
+                "Почта покупателя не должна быть пустой",
                 assertThrows(MockPartnerBadRequestException.class,
                         () -> service.reissue("org1", new MockTicketReissueRequest("TICKET-12345", ""))).getMessage()
         );
         assertEquals(
-                "buyerEmail must not be blank",
+                "Почта покупателя не должна быть пустой",
                 assertThrows(MockPartnerBadRequestException.class,
                         () -> service.reissue("org1", new MockTicketReissueRequest("TICKET-12345", "   "))).getMessage()
         );
@@ -85,6 +85,6 @@ class MockTicketReissueServiceTest {
                 () -> service.reissue("org1", null)
         );
 
-        assertEquals("Request body must not be empty", ex.getMessage());
+        assertEquals("Тело запроса не должно быть пустым", ex.getMessage());
     }
 }

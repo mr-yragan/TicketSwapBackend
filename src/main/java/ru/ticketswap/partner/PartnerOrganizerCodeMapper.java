@@ -1,18 +1,19 @@
 package ru.ticketswap.partner;
 
 import org.springframework.stereotype.Component;
+import ru.ticketswap.organizer.OrganizerRepository;
 
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 
 @Component
 public class PartnerOrganizerCodeMapper {
 
-    private static final Map<String, String> SUPPORTED_ORGANIZERS = Map.of(
-            "org1", "org1",
-            "org2", "org2"
-    );
+    private final OrganizerRepository organizerRepository;
+
+    public PartnerOrganizerCodeMapper(OrganizerRepository organizerRepository) {
+        this.organizerRepository = organizerRepository;
+    }
 
     public Optional<String> resolveOrganizerCode(String organizerName) {
         String normalizedOrganizerName = normalizeOrganizerName(organizerName);
@@ -20,7 +21,8 @@ public class PartnerOrganizerCodeMapper {
             return Optional.empty();
         }
 
-        return Optional.ofNullable(SUPPORTED_ORGANIZERS.get(normalizedOrganizerName));
+        return organizerRepository.findByApiKeyIgnoreCase(normalizedOrganizerName)
+                .map(organizer -> organizer.getApiKey());
     }
 
     public String normalizeOrganizerName(String organizerName) {

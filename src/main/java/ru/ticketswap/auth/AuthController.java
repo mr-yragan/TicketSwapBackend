@@ -28,7 +28,7 @@ public class AuthController {
     public ResponseEntity<EmailVerificationResponse> register(@Valid @RequestBody AuthRequest request) {
         authService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new EmailVerificationResponse("Registration successful. Please verify your email"));
+                .body(new EmailVerificationResponse("Регистрация прошла успешно. Пожалуйста, подтвердите почту"));
     }
 
     @PostMapping("/login")
@@ -63,13 +63,13 @@ public class AuthController {
         passwordResetService.requestPasswordReset(request.email());
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(new ForgotPasswordResponse(
-                        "If an account with that email exists, password reset instructions have been sent"
+                        "Если аккаунт с такой почтой существует, инструкция по сбросу пароля была отправлена"
                 ));
     }
 
     @PostMapping("/password/reset")
     public ResponseEntity<ResetPasswordResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         passwordResetService.resetPassword(request.token(), request.newPassword());
-        return ResponseEntity.ok(new ResetPasswordResponse("Password successfully reset"));
+        return ResponseEntity.ok(new ResetPasswordResponse("Пароль успешно сброшен"));
     }
 }

@@ -7,10 +7,10 @@ public record MockPartnerApiError(
 ) {
 
     public static MockPartnerApiError badRequest(String message) {
-        return new MockPartnerApiError("Bad Request", message, 400);
+        return new MockPartnerApiError("Некорректный запрос", message, 400);
     }
 
     public static MockPartnerApiError notFound(String message) {
-        return new MockPartnerApiError("Not Found", message, 404);
+        return new MockPartnerApiError("Не найдено", message, 404);
     }
 }

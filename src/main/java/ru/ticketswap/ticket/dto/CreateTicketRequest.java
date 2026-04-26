@@ -10,33 +10,49 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public record CreateTicketRequest(
-        @NotBlank(message = "uid is required")
-        @Size(max = 255, message = "uid must be at most 255 characters")
+        @NotBlank(message = "UID обязателен")
+        @Size(max = 255, message = "UID должен быть не длиннее 255 символов")
         String uid,
 
-        @NotBlank(message = "eventName is required")
-        @Size(max = 255, message = "eventName must be at most 255 characters")
+        @NotBlank(message = "Название мероприятия обязательно")
+        @Size(max = 255, message = "Название мероприятия должно быть не длиннее 255 символов")
         String eventName,
 
-        @NotNull(message = "eventDate is required")
-        @Future(message = "eventDate must be in the future")
+        @NotNull(message = "Дата мероприятия обязательна")
+        @Future(message = "Дата мероприятия должна быть в будущем")
         LocalDateTime eventDate,
 
-        @NotBlank(message = "venue is required")
-        @Size(max = 255, message = "venue must be at most 255 characters")
+        @NotBlank(message = "Площадка обязательна")
+        @Size(max = 255, message = "Площадка должна быть не длиннее 255 символов")
         String venue,
 
-        @NotNull(message = "price is required")
-        @DecimalMin(value = "0.01", message = "price must be positive")
+        @NotNull(message = "Цена обязательна")
+        @DecimalMin(value = "0.01", message = "Цена должна быть положительной")
         BigDecimal price,
 
-        @Size(max = 2000, message = "additionalInfo must be at most 2000 characters")
+        @Size(max = 2000, message = "Дополнительная информация должна быть не длиннее 2000 символов")
         String additionalInfo,
 
-        @Size(max = 255, message = "organizerName must be at most 255 characters")
+        @Size(max = 255, message = "Название организатора должно быть не длиннее 255 символов")
         String organizerName,
 
-        @Size(max = 2000, message = "sellerComment must be at most 2000 characters")
+        @Size(max = 255, message = "ID мероприятия должен быть не длиннее 255 символов")
+        String eventId,
+
+        @Size(max = 2000, message = "Комментарий продавца должен быть не длиннее 2000 символов")
         String sellerComment
 ) {
+
+    public CreateTicketRequest(
+            String uid,
+            String eventName,
+            LocalDateTime eventDate,
+            String venue,
+            BigDecimal price,
+            String additionalInfo,
+            String organizerName,
+            String sellerComment
+    ) {
+        this(uid, eventName, eventDate, venue, price, additionalInfo, organizerName, null, sellerComment);
+    }
 }

@@ -29,18 +29,18 @@ public class MailService {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(properties.getMail().getFrom());
         message.setTo(recipientEmail);
-        message.setSubject("TicketSwap login confirmation code");
+        message.setSubject("Код подтверждения входа в TicketSwap");
         message.setText("""
-                Your TicketSwap confirmation code is: %s
-                The code expires at: %s
+                Ваш код подтверждения TicketSwap: %s
+                Срок действия кода истекает: %s
 
-                If you did not try to sign in, ignore this email.
+                Если вы не пытались войти, проигнорируйте это письмо.
                 """.formatted(
                 code,
                 EXPIRES_AT_FORMATTER.format(expiresAt.atOffset(ZoneOffset.UTC))
         ));
 
-        send(message, "Unable to send confirmation code");
+        send(message, "Не удалось отправить код подтверждения");
     }
 
     public void sendPasswordResetLink(String recipientEmail, String token, Instant expiresAt) {
@@ -52,20 +52,20 @@ public class MailService {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(properties.getMail().getFrom());
         message.setTo(recipientEmail);
-        message.setSubject("TicketSwap password reset");
+        message.setSubject("Сброс пароля TicketSwap");
         message.setText("""
-                We received a request to reset your TicketSwap password.
+                Мы получили запрос на сброс пароля TicketSwap.
 
-                Reset link: %s
-                The link expires at: %s
+                Ссылка для сброса: %s
+                Срок действия ссылки истекает: %s
 
-                If you did not request a password reset, ignore this email.
+                Если вы не запрашивали сброс пароля, проигнорируйте это письмо.
                 """.formatted(
                 resetLink,
                 EXPIRES_AT_FORMATTER.format(expiresAt.atOffset(ZoneOffset.UTC))
         ));
 
-        send(message, "Unable to send password reset email");
+        send(message, "Не удалось отправить письмо для сброса пароля");
     }
 
     public void sendEmailVerificationLink(String recipientEmail, String token, Instant expiresAt) {
@@ -77,22 +77,22 @@ public class MailService {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(properties.getMail().getFrom());
         message.setTo(recipientEmail);
-        message.setSubject("TicketSwap email verification");
+        message.setSubject("Подтверждение почты TicketSwap");
         message.setText("""
-                Welcome to TicketSwap.
+                Добро пожаловать в TicketSwap.
 
-                Please verify your email address using this link:
+                Пожалуйста, подтвердите адрес почты по этой ссылке:
                 %s
 
-                The link expires at: %s
+                Срок действия ссылки истекает: %s
 
-                If you did not create this account, ignore this email.
+                Если вы не создавали этот аккаунт, проигнорируйте это письмо.
                 """.formatted(
                 verifyLink,
                 EXPIRES_AT_FORMATTER.format(expiresAt.atOffset(ZoneOffset.UTC))
         ));
 
-        send(message, "Unable to send email verification email");
+        send(message, "Не удалось отправить письмо для подтверждения почты");
     }
 
     private void send(SimpleMailMessage message, String errorMessage) {

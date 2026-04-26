@@ -4,17 +4,20 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import ru.ticketswap.event.Event;
 import ru.ticketswap.mockpartner.data.MockPartnerDataProvider;
-import ru.ticketswap.mockpartner.data.MockPartnerEventData;
 import ru.ticketswap.mockpartner.dto.MockPartnerEventResponse;
 import ru.ticketswap.mockpartner.service.MockPartnerEventMapper;
 import ru.ticketswap.mockpartner.service.MockPartnerOrganizerResolver;
 import ru.ticketswap.mockpartner.service.MockPartnerService;
 import ru.ticketswap.mockpartner.service.MockTicketReissueService;
 import ru.ticketswap.mockpartner.service.MockTicketVerificationService;
+import ru.ticketswap.organizer.Organizer;
+import ru.ticketswap.venue.Venue;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -37,59 +40,53 @@ class MockPartnerServiceTest {
     private MockTicketReissueService mockTicketReissueService;
 
     @Test
-    void getUpcomingEventsFiltersByOrganizerFutureDateSortsAndComputesLocalDate() {
-        MockPartnerService service = new MockPartnerService(
-                mockPartnerDataProvider,
-                mockPartnerOrganizerResolver,
-                new MockPartnerEventMapper(),
-                mockTicketVerificationService,
-                mockTicketReissueService
-        );
+    void getUpcomingEventsFiltersByOrganizerFutureDateSortsAndUsesStoredLocalDate() {
+        MockPartnerService service = createService();
 
         Instant now = Instant.now();
-        MockPartnerEventData wrongOrganizer = new MockPartnerEventData(
-                3001,
-                "Концерт группы Сплин",
+        Event wrongOrganizer = createEvent(
+                "3001",
+                "Концерт",
                 now.plusSeconds(10_000),
                 "org2",
                 "Ледовый дворец",
-                "Санкт-Петербург, проспект Пятилеток",
+                "Санкт-Петербург",
                 "Europe/Moscow"
         );
-        MockPartnerEventData pastEvent = new MockPartnerEventData(
-                1000,
-                "Прошедший концерт Мумий Тролль",
+        Event pastEvent = createEvent(
+                "1000",
+                "Прошедший концерт",
                 now.minusSeconds(3_600),
                 "org1",
                 "ВТБ Арена",
-                "Москва, Ленинградский проспект",
+                "Москва",
                 "Europe/Moscow"
         );
-        MockPartnerEventData sameStartsAtHigherId = new MockPartnerEventData(
-                1003,
+        Event sameStartsAtHigherId = createEvent(
+                "1003",
                 "Концерт ДДТ",
                 Instant.parse("2031-08-29T22:30:00Z"),
                 "org1",
                 "Лужники",
-                "Москва, улица Лужники",
+                "Москва",
                 "Europe/Moscow"
         );
-        MockPartnerEventData sameStartsAtLowerId = new MockPartnerEventData(
-                1002,
+        Event sameStartsAtLowerId = createEvent(
+                "1002",
                 "Концерт Би-2",
                 Instant.parse("2031-08-29T22:30:00Z"),
                 "org1",
                 "Лужники",
-                "Москва, улица Лужники",
+                "Москва",
                 "Europe/Moscow"
         );
-        MockPartnerEventData laterEvent = new MockPartnerEventData(
-                1004L,
+        Event laterEvent = createEvent(
+                "1004",
                 "Концерт Земфиры",
                 Instant.parse("2031-08-30T01:00:00Z"),
                 "org1",
                 "ВТБ Арена",
-                "Москва, Ленинградский проспект",
+                "Москва",
                 "Europe/Moscow"
         );
 
@@ -106,23 +103,48 @@ class MockPartnerServiceTest {
 
         assertEquals(3, response.size());
         assertTrue(response.stream().allMatch(event -> "org1".equals(event.organizerCode())));
-        assertEquals(List.of(1002L, 1003L, 1004L), response.stream().map(MockPartnerEventResponse::externalEventId).toList());
+        assertEquals(List.of("1002", "1003", "1004"), response.stream().map(MockPartnerEventResponse::externalEventId).toList());
         assertEquals(LocalDate.of(2031, 8, 30), response.get(0).date());
     }
 
     @Test
     void getUpcomingEventsReturnsEmptyListWhenOrganizerHasNoUpcomingEvents() {
-        MockPartnerService service = new MockPartnerService(
+        MockPartnerService service = createService();
+
+        when(mockPartnerOrganizerResolver.requireSupportedOrganizer("org1")).thenReturn("org1");
+        when(mockPartnerDataProvider.getEventsByOrganizerCode("org1")).thenReturn(List.of());
+
+        assertTrue(service.getUpcomingEvents("org1").isEmpty());
+    }
+
+    private MockPartnerService createService() {
+        return new MockPartnerService(
                 mockPartnerDataProvider,
                 mockPartnerOrganizerResolver,
                 new MockPartnerEventMapper(),
                 mockTicketVerificationService,
                 mockTicketReissueService
         );
+    }
 
-        when(mockPartnerOrganizerResolver.requireSupportedOrganizer("org1")).thenReturn("org1");
-        when(mockPartnerDataProvider.getEventsByOrganizerCode("org1")).thenReturn(List.of());
-
-        assertTrue(service.getUpcomingEvents("org1").isEmpty());
+    private Event createEvent(
+            String eventId,
+            String name,
+            Instant startsAt,
+            String organizerCode,
+            String venueName,
+            String venueAddress,
+            String venueTimezone
+    ) {
+        Venue venue = new Venue(venueName, venueAddress, venueTimezone);
+        Organizer organizer = new Organizer("Организатор " + organizerCode, organizerCode, organizerCode + "@example.com");
+        return new Event(
+                eventId,
+                name,
+                venue,
+                organizer,
+                startsAt,
+                startsAt.atZone(ZoneId.of(venueTimezone)).toLocalDate()
+        );
     }
 }

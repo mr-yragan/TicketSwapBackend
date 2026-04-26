@@ -6,11 +6,11 @@ import jakarta.validation.constraints.Size;
 
 public record LoginRequest(
         @JsonAlias({"username", "login", "email", "phone", "phoneNumber"})
-        @NotBlank(message = "Identifier is required")
-        @Size(max = 255, message = "Identifier must be at most 255 characters")
+        @NotBlank(message = "Идентификатор обязателен")
+        @Size(max = 255, message = "Идентификатор должен быть не длиннее 255 символов")
         String identifier,
-        @NotBlank(message = "Password is required")
-        @Size(min = 8, max = 72, message = "Password must be between 8 and 72 characters")
+        @NotBlank(message = "Пароль обязателен")
+        @Size(min = 8, max = 72, message = "Пароль должен быть от 8 до 72 символов")
         String password
 ) {
 }

@@ -47,7 +47,7 @@ class HttpPartnerApiClientTest {
             capturedPath.set(exchange.getRequestURI().getPath());
             capturedBody.set(readBody(exchange));
             writeJson(exchange, 200, """
-                    {"valid":true,"ticketUid":"ticket-123","organizerCode":"org1","reason":"ok"}
+                    {"valid":true,"ticketUid":"ticket-123","organizerCode":"org1","reason":"успешно"}
                     """);
         });
 
@@ -66,7 +66,7 @@ class HttpPartnerApiClientTest {
     @Test
     void verifyTicketWrapsBadRequestAsPartnerIntegrationException() throws Exception {
         startServer(exchange -> writeJson(exchange, 400, """
-                {"error":"bad request"}
+                {"error":"некорректный запрос"}
                 """));
 
         HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500));
@@ -82,7 +82,7 @@ class HttpPartnerApiClientTest {
     @Test
     void verifyTicketWrapsNotFoundAsPartnerIntegrationException() throws Exception {
         startServer(exchange -> writeJson(exchange, 404, """
-                {"error":"not found"}
+                {"error":"не найдено"}
                 """));
 
         HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500));
@@ -108,7 +108,7 @@ class HttpPartnerApiClientTest {
                 () -> client.verifyTicket("org1", "ticket-123")
         );
 
-        assertTrue(ex.getMessage().contains("request failed"));
+        assertTrue(ex.getMessage().contains("Запрос к API партнёра не выполнен"));
     }
 
     @Test
@@ -124,7 +124,7 @@ class HttpPartnerApiClientTest {
                 () -> client.verifyTicket("org1", "ticket-123")
         );
 
-        assertTrue(ex.getMessage().contains("invalid organizerCode"));
+        assertTrue(ex.getMessage().contains("некорректный код организатора"));
     }
 
     @Test
@@ -147,7 +147,7 @@ class HttpPartnerApiClientTest {
                 () -> client.verifyTicket("org1", "ticket-123")
         );
 
-        assertTrue(ex.getMessage().contains("request failed"));
+        assertTrue(ex.getMessage().contains("Запрос к API партнёра не выполнен"));
     }
 
     @Test
@@ -181,7 +181,7 @@ class HttpPartnerApiClientTest {
     @Test
     void reissueTicketAllowsBusinessFailureResponse() throws Exception {
         startServer(exchange -> writeJson(exchange, 200, """
-                {"success":false,"originalTicketUid":"ticket-FAIL","organizerCode":"org1","reason":"Mock reissue failed"}
+                {"success":false,"originalTicketUid":"ticket-FAIL","organizerCode":"org1","reason":"Mock-перевыпуск не выполнен"}
                 """));
 
         HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500));
@@ -189,7 +189,7 @@ class HttpPartnerApiClientTest {
         PartnerTicketReissueResponse response = client.reissueTicket("org1", "ticket-FAIL", "buyer@example.com");
 
         assertEquals(false, response.success());
-        assertEquals("Mock reissue failed", response.reason());
+        assertEquals("Mock-перевыпуск не выполнен", response.reason());
     }
 
     @Test
@@ -205,7 +205,7 @@ class HttpPartnerApiClientTest {
                 () -> client.reissueTicket("org1", "ticket-123", "buyer@example.com")
         );
 
-        assertTrue(ex.getMessage().contains("invalid newTicketUid"));
+        assertTrue(ex.getMessage().contains("некорректный UID нового билета"));
     }
 
     private void startServer(HttpHandler handler) throws IOException {

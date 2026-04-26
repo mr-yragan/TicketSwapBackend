@@ -7,14 +7,19 @@ import ru.ticketswap.mockpartner.service.MockPartnerOrganizerResolver;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class MockPartnerOrganizerResolverTest {
 
-    private final MockPartnerOrganizerResolver resolver =
-            new MockPartnerOrganizerResolver(new MockPartnerDataProvider());
+    private final MockPartnerDataProvider mockPartnerDataProvider = mock(MockPartnerDataProvider.class);
+    private final MockPartnerOrganizerResolver resolver = new MockPartnerOrganizerResolver(mockPartnerDataProvider);
 
     @Test
     void requireSupportedOrganizerAcceptsOrg1AndOrg2() {
+        when(mockPartnerDataProvider.isSupportedOrganizer("org1")).thenReturn(true);
+        when(mockPartnerDataProvider.isSupportedOrganizer("org2")).thenReturn(true);
+
         assertEquals("org1", resolver.requireSupportedOrganizer("org1"));
         assertEquals("org2", resolver.requireSupportedOrganizer("org2"));
     }
@@ -26,6 +31,6 @@ class MockPartnerOrganizerResolverTest {
                 () -> resolver.requireSupportedOrganizer("org3")
         );
 
-        assertEquals("Organizer not found: org3", ex.getMessage());
+        assertEquals("Организатор не найден: org3", ex.getMessage());
     }
 }

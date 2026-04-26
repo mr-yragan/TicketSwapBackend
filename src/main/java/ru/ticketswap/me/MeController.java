@@ -40,7 +40,6 @@ public class MeController {
             UserRepository userRepository,
             TicketRepository ticketRepository,
             ListingHoldRepository listingHoldRepository,
-            UserIdentityService userIdentityService
             UserIdentityService userIdentityService,
             TwoFactorService twoFactorService
     ) {
@@ -168,10 +167,10 @@ public class MeController {
 
     private User requireUser(UserDetails principal) {
         if (principal == null || principal.getUsername() == null) {
-            throw new UnauthorizedException("Unauthorized");
+            throw new UnauthorizedException("Не авторизован");
         }
         return userRepository.findByEmail(principal.getUsername())
-                .orElseThrow(() -> new UnauthorizedException("Unauthorized"));
+                .orElseThrow(() -> new UnauthorizedException("Не авторизован"));
     }
 
     private MeProfileResponse toMeResponse(User user) {
@@ -182,6 +181,7 @@ public class MeController {
                 user.getLogin(),
                 user.getPhoneNumber(),
                 user.getRole(),
+                user.isTwoFactorEnabled(),
                 user.getCreatedAt()
         );
     }

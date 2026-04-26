@@ -67,21 +67,21 @@ public class PasswordResetService {
         Instant now = Instant.now();
         String normalizedToken = token == null ? "" : token.trim();
         if (normalizedToken.isBlank()) {
-            throw new InvalidPasswordResetTokenException("Password reset token is invalid or already used");
+            throw new InvalidPasswordResetTokenException("Токен сброса пароля недействителен или уже использован");
         }
 
         PasswordResetToken resetToken = passwordResetTokenRepository.findForUpdateByTokenHash(hashToken(normalizedToken))
                 .orElseThrow(() -> new InvalidPasswordResetTokenException(
-                        "Password reset token is invalid or already used"
+                        "Токен сброса пароля недействителен или уже использован"
                 ));
 
         if (resetToken.isConsumed()) {
-            throw new InvalidPasswordResetTokenException("Password reset token is invalid or already used");
+            throw new InvalidPasswordResetTokenException("Токен сброса пароля недействителен или уже использован");
         }
 
         if (resetToken.isExpired(now)) {
             resetToken.markConsumed(now);
-            throw new ExpiredPasswordResetTokenException("Password reset token expired");
+            throw new ExpiredPasswordResetTokenException("Срок действия токена сброса пароля истёк");
         }
 
         User user = resetToken.getUser();
@@ -104,7 +104,7 @@ public class PasswordResetService {
         try {
             mailService.sendPasswordResetLink(user.getEmail(), token, expiresAt);
         } catch (MailDeliveryException ex) {
-            log.warn("Unable to send password reset email to {}", user.getEmail(), ex);
+            log.warn("Не удалось отправить письмо для сброса пароля на {}", user.getEmail(), ex);
             passwordResetToken.markConsumed(now);
             return;
         }
@@ -123,7 +123,7 @@ public class PasswordResetService {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             return HexFormat.of().formatHex(digest.digest(token.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("SHA-256 is not available", ex);
+            throw new IllegalStateException("SHA-256 недоступен", ex);
         }
     }
 }

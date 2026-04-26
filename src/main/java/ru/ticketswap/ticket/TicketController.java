@@ -9,6 +9,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import ru.ticketswap.common.BusinessRuleException;
+import ru.ticketswap.event.Event;
+import ru.ticketswap.event.EventRepository;
 import ru.ticketswap.common.NotFoundException;
 import ru.ticketswap.common.UnauthorizedException;
 import ru.ticketswap.hold.ListingHold;
@@ -48,6 +50,7 @@ public class TicketController {
     private final ListingLifecycleService listingLifecycleService;
     private final ListingWriteService listingWriteService;
     private final PartnerOrganizerCodeMapper partnerOrganizerCodeMapper;
+    private final EventRepository eventRepository;
     private final TicketFileStorageService ticketFileStorageService;
     private final ListingStatusHistoryService listingStatusHistoryService;
 
@@ -59,6 +62,7 @@ public class TicketController {
             ListingLifecycleService listingLifecycleService,
             ListingWriteService listingWriteService,
             PartnerOrganizerCodeMapper partnerOrganizerCodeMapper,
+            EventRepository eventRepository,
             TicketFileStorageService ticketFileStorageService,
             ListingStatusHistoryService listingStatusHistoryService
     ) {
@@ -69,6 +73,7 @@ public class TicketController {
         this.listingLifecycleService = listingLifecycleService;
         this.listingWriteService = listingWriteService;
         this.partnerOrganizerCodeMapper = partnerOrganizerCodeMapper;
+        this.eventRepository = eventRepository;
         this.ticketFileStorageService = ticketFileStorageService;
         this.listingStatusHistoryService = listingStatusHistoryService;
     }
@@ -98,7 +103,7 @@ public class TicketController {
         User currentUser = tryLoadUser(userDetails);
 
         if (!isVisibleForPublic(ticket) && !isSeller(ticket, currentUser)) {
-            throw new NotFoundException("Ticket not found");
+            throw new NotFoundException("Билет не найден");
         }
 
         Optional<ListingHold> activeHold = listingHoldRepository.findByListingIdAndHoldUntilAfter(id, Instant.now());
@@ -124,7 +129,7 @@ public class TicketController {
         User currentUser = tryLoadUser(userDetails);
 
         if (!isVisibleForPublic(ticket) && !isSeller(ticket, currentUser)) {
-            throw new NotFoundException("Ticket not found");
+            throw new NotFoundException("Билет не найден");
         }
 
         List<ListingStatusHistoryResponse> response = listingStatusHistoryService.getHistory(id).stream()
@@ -212,7 +217,7 @@ public class TicketController {
         listingHoldRepository.flush();
 
         ticket.setBuyer(null);
-        listingStatusHistoryService.transition(ticket, TicketStatus.FAILED, "Listing cancelled by seller", seller);
+        listingStatusHistoryService.transition(ticket, TicketStatus.FAILED, "Объявление отменено продавцом", seller);
 
         return ResponseEntity.noContent().build();
     }
@@ -367,6 +372,7 @@ public class TicketController {
 
     private TicketLot createListing(CreateTicketRequest request, User seller) {
         VenueParts venueParts = parseVenueParts(request.venue());
+        Event linkedEvent = resolveLinkedEvent(request);
 
         TicketLot ticket = new TicketLot(
                 request.uid(),
@@ -380,22 +386,41 @@ public class TicketController {
                 request.sellerComment(),
                 seller
         );
+        ticket.setEvent(linkedEvent);
 
-        return listingStatusHistoryService.createListingWithInitialStatus(ticket, "Listing created", seller);
+        return listingStatusHistoryService.createListingWithInitialStatus(ticket, "Объявление создано", seller);
+    }
+
+    private Event resolveLinkedEvent(CreateTicketRequest request) {
+        if (request.eventId() == null || request.eventId().isBlank()) {
+            return null;
+        }
+
+        Optional<String> organizerCode = partnerOrganizerCodeMapper.resolveOrganizerCode(request.organizerName());
+        if (organizerCode.isEmpty()) {
+            throw new BusinessRuleException("ID мероприятия указан, но организатор не поддерживается");
+        }
+
+        return eventRepository
+                .findByOrganizerApiKeyIgnoreCaseAndEventIdIgnoreCase(
+                        organizerCode.get(),
+                        request.eventId().trim()
+                )
+                .orElseThrow(() -> new BusinessRuleException("ID мероприятия указан, но мероприятие не найдено"));
     }
 
     private TicketLot loadTicket(Long id) {
         return ticketRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Ticket not found"));
+                .orElseThrow(() -> new NotFoundException("Билет не найден"));
     }
 
     private User requireUser(UserDetails principal) {
         if (principal == null || principal.getUsername() == null) {
-            throw new UnauthorizedException("Unauthorized");
+            throw new UnauthorizedException("Не авторизован");
         }
 
         return userRepository.findByEmailIgnoreCase(principal.getUsername())
-                .orElseThrow(() -> new UnauthorizedException("Unauthorized"));
+                .orElseThrow(() -> new UnauthorizedException("Не авторизован"));
     }
 
     private User tryLoadUser(UserDetails principal) {
@@ -409,11 +434,11 @@ public class TicketController {
         ensureSellerOwnsTicket(ticket, seller);
 
         if (ticket.getStatus() == TicketStatus.PROCESSING || ticket.getStatus() == TicketStatus.COMPLETED) {
-            throw new BusinessRuleException("Listing cannot be changed after purchase has started");
+            throw new BusinessRuleException("Объявление нельзя изменить после начала покупки");
         }
 
         if (hasActiveHold(ticket.getId())) {
-            throw new BusinessRuleException("Listing cannot be changed while it is reserved by a buyer");
+            throw new BusinessRuleException("Объявление нельзя изменить, пока оно зарезервировано покупателем");
         }
     }
 
@@ -421,17 +446,17 @@ public class TicketController {
         ensureSellerOwnsTicket(ticket, seller);
 
         if (ticket.getStatus() == TicketStatus.PROCESSING || ticket.getStatus() == TicketStatus.COMPLETED) {
-            throw new BusinessRuleException("Ticket files cannot be changed after purchase has started");
+            throw new BusinessRuleException("Файлы билета нельзя изменить после начала покупки");
         }
 
         if (hasActiveHold(ticket.getId())) {
-            throw new BusinessRuleException("Ticket files cannot be changed while the listing is reserved by a buyer");
+            throw new BusinessRuleException("Файлы билета нельзя изменить, пока объявление зарезервировано покупателем");
         }
     }
 
     private void ensureSellerOwnsTicket(TicketLot ticket, User seller) {
         if (ticket.getSeller() == null || ticket.getSeller().getId() == null || !ticket.getSeller().getId().equals(seller.getId())) {
-            throw new UnauthorizedException("You can modify only your own listings");
+            throw new UnauthorizedException("Можно изменять только свои объявления");
         }
     }
 
@@ -444,7 +469,7 @@ public class TicketController {
                 && ticket.getBuyer().getId().equals(currentUser.getId());
 
         if (!isSeller && !isCompletedBuyer) {
-            throw new UnauthorizedException("You do not have access to these ticket files");
+            throw new UnauthorizedException("У вас нет доступа к этим файлам билета");
         }
     }
 
@@ -478,9 +503,13 @@ public class TicketController {
                 || !safeEquals(ticket.getVenueName(), newVenueParts.venueName())
                 || !safeEquals(ticket.getVenueCity(), newVenueParts.venueCity())
                 || !safeEquals(
-                        partnerOrganizerCodeMapper.normalizeOrganizerName(ticket.getOrganizerName()),
-                        partnerOrganizerCodeMapper.normalizeOrganizerName(request.organizerName())
-                );
+                partnerOrganizerCodeMapper.normalizeOrganizerName(ticket.getOrganizerName()),
+                partnerOrganizerCodeMapper.normalizeOrganizerName(request.organizerName())
+        )
+                || !safeEquals(
+                ticket.getEvent() == null ? null : ticket.getEvent().getEventId(),
+                request.eventId()
+        );
     }
 
     private void applyEditableFields(TicketLot ticket, CreateTicketRequest request, VenueParts venueParts) {
@@ -491,6 +520,7 @@ public class TicketController {
         ticket.setVenueCity(venueParts.venueCity());
         ticket.setAdditionalInfo(request.additionalInfo());
         ticket.setOrganizerName(request.organizerName());
+        ticket.setEvent(resolveLinkedEvent(request));
         ticket.setSellerComment(request.sellerComment());
         ticket.setOriginalPrice(request.price());
         ticket.setResalePrice(request.price());

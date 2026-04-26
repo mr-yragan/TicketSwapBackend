@@ -1,6 +1,7 @@
 package ru.ticketswap.ticket;
 
 import jakarta.persistence.*;
+import ru.ticketswap.event.Event;
 import ru.ticketswap.user.User;
 
 import java.math.BigDecimal;
@@ -29,6 +30,10 @@ public class TicketLot {
 
     @Column(nullable = false)
     private LocalDateTime eventDate;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "event_id")
+    private Event event;
 
     @Column(name = "venue_name", nullable = false)
     private String venueName;
@@ -134,6 +139,14 @@ public class TicketLot {
 
     public void setEventDate(LocalDateTime eventDate) {
         this.eventDate = eventDate;
+    }
+
+    public Event getEvent() {
+        return event;
+    }
+
+    public void setEvent(Event event) {
+        this.event = event;
     }
 
     public String getVenueName() {

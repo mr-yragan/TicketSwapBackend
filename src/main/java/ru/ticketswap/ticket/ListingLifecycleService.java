@@ -15,12 +15,12 @@ import java.time.LocalDateTime;
 @Service
 public class ListingLifecycleService {
 
-    private static final String VALIDATION_STARTED_REASON = "Validation started";
-    private static final String VALIDATION_FAILED_PAST_EVENT_REASON = "Validation failed: event date is in the past";
-    private static final String PARTNER_VALIDATION_PASSED_REASON = "Partner validation passed";
-    private static final String PARTNER_VALIDATION_FAILED_REASON = "Partner validation failed";
-    private static final String PARTNER_VALIDATION_UNSUPPORTED_ORGANIZER_REASON = "Partner validation failed: unsupported organizer";
-    private static final String PARTNER_VALIDATION_INTEGRATION_ERROR_REASON = "Partner validation failed: integration error";
+    private static final String VALIDATION_STARTED_REASON = "Проверка начата";
+    private static final String VALIDATION_FAILED_PAST_EVENT_REASON = "Проверка не пройдена: дата мероприятия уже прошла";
+    private static final String PARTNER_VALIDATION_PASSED_REASON = "Проверка партнёра пройдена";
+    private static final String PARTNER_VALIDATION_FAILED_REASON = "Проверка партнёра не пройдена";
+    private static final String PARTNER_VALIDATION_UNSUPPORTED_ORGANIZER_REASON = "Проверка партнёра не пройдена: организатор не поддерживается";
+    private static final String PARTNER_VALIDATION_INTEGRATION_ERROR_REASON = "Проверка партнёра не пройдена: ошибка интеграции";
 
     private final TicketRepository ticketRepository;
     private final TransactionTemplate tx;

@@ -1,26 +1,27 @@
 package ru.ticketswap.mockpartner.service;
 
 import org.springframework.stereotype.Component;
-import ru.ticketswap.mockpartner.data.MockPartnerEventData;
+import ru.ticketswap.event.Event;
 import ru.ticketswap.mockpartner.dto.MockPartnerEventResponse;
-
-import java.time.ZoneId;
+import ru.ticketswap.organizer.Organizer;
+import ru.ticketswap.venue.Venue;
 
 @Component
 public class MockPartnerEventMapper {
 
-    public MockPartnerEventResponse toResponse(MockPartnerEventData event) {
-        ZoneId venueZone = ZoneId.of(event.venueTimezone());
+    public MockPartnerEventResponse toResponse(Event event) {
+        Organizer organizer = event.getOrganizer();
+        Venue venue = event.getVenue();
 
         return new MockPartnerEventResponse(
-                event.externalEventId(),
-                event.name(),
-                event.startsAt(),
-                event.startsAt().atZone(venueZone).toLocalDate(),
-                event.organizerCode(),
-                event.venueName(),
-                event.venueAddress(),
-                event.venueTimezone()
+                event.getEventId(),
+                event.getName(),
+                event.getStartsAt(),
+                event.getDate(),
+                organizer.getApiKey(),
+                venue.getName(),
+                venue.getAddress(),
+                venue.getTimezone()
         );
     }
 }

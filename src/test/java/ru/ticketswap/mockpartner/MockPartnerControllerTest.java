@@ -1,6 +1,7 @@
 package ru.ticketswap.mockpartner;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -10,6 +11,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.test.web.servlet.MockMvc;
+import ru.ticketswap.event.Event;
+import ru.ticketswap.event.EventRepository;
 import ru.ticketswap.auth.JwtService;
 import ru.ticketswap.config.JwtAuthenticationFilter;
 import ru.ticketswap.config.RestAccessDeniedHandler;
@@ -26,13 +29,19 @@ import ru.ticketswap.mockpartner.service.MockPartnerOrganizerResolver;
 import ru.ticketswap.mockpartner.service.MockPartnerService;
 import ru.ticketswap.mockpartner.service.MockTicketReissueService;
 import ru.ticketswap.mockpartner.service.MockTicketVerificationService;
+import ru.ticketswap.organizer.Organizer;
+import ru.ticketswap.organizer.OrganizerRepository;
 import ru.ticketswap.user.UserIdentityService;
+import ru.ticketswap.venue.Venue;
 
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.is;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -81,6 +90,23 @@ class MockPartnerControllerTest {
     @MockBean
     private UserIdentityService userIdentityService;
 
+    @MockBean
+    private OrganizerRepository organizerRepository;
+
+    @MockBean
+    private EventRepository eventRepository;
+
+    @BeforeEach
+    void setUpOrganizerRepository() {
+        when(organizerRepository.existsByApiKeyIgnoreCase("org1")).thenReturn(true);
+        when(organizerRepository.existsByApiKeyIgnoreCase("org2")).thenReturn(true);
+        when(organizerRepository.existsByApiKeyIgnoreCase("org3")).thenReturn(false);
+        when(eventRepository.findAllByOrganizerApiKeyIgnoreCaseOrderByStartsAtAscIdAsc("org1"))
+                .thenReturn(List.of(createEvent("1001", "org1")));
+        when(eventRepository.findAllByOrganizerApiKeyIgnoreCaseOrderByStartsAtAscIdAsc("org2"))
+                .thenReturn(List.of(createEvent("2001", "org2")));
+    }
+
     @Test
     void getOrg1EventsReturns200AndOnlyOrg1Events() throws Exception {
         mockMvc.perform(get("/api/mock/partners/org1/events"))
@@ -104,9 +130,22 @@ class MockPartnerControllerTest {
         mockMvc.perform(get("/api/mock/partners/org3/events"))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.error").value("Not Found"))
-                .andExpect(jsonPath("$.message").value("Organizer not found: org3"))
+                .andExpect(jsonPath("$.error").value("Не найдено"))
+                .andExpect(jsonPath("$.message").value("Организатор не найден: org3"))
                 .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    void getCreatedOrganizerEventsReturns200Json() throws Exception {
+        when(organizerRepository.existsByApiKeyIgnoreCase("org3")).thenReturn(true);
+        when(eventRepository.findAllByOrganizerApiKeyIgnoreCaseOrderByStartsAtAscIdAsc("org3"))
+                .thenReturn(List.of(createEvent("EVT-10001", "org3")));
+
+        mockMvc.perform(get("/api/mock/partners/org3/events"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$[0].externalEventId").value("EVT-10001"))
+                .andExpect(jsonPath("$[0].organizerCode").value("org3"));
     }
 
     @Test
@@ -123,6 +162,19 @@ class MockPartnerControllerTest {
                 .andExpect(jsonPath("$.ticketUid").value("TICKET-12345"))
                 .andExpect(jsonPath("$.organizerCode").value("org1"))
                 .andExpect(jsonPath("$.valid").exists());
+    }
+
+    private Event createEvent(String eventId, String organizerCode) {
+        Venue venue = new Venue("Арена " + organizerCode, "Адрес " + organizerCode, "Europe/Moscow");
+        Organizer organizer = new Organizer("Организатор " + organizerCode, organizerCode, organizerCode + "@example.com");
+        return new Event(
+                eventId,
+                "Концерт " + organizerCode,
+                venue,
+                organizer,
+                Instant.parse("2031-01-01T10:00:00Z"),
+                LocalDate.of(2031, 1, 1)
+        );
     }
 
     @Test
@@ -157,7 +209,7 @@ class MockPartnerControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.newTicketUid").doesNotExist())
-                .andExpect(jsonPath("$.reason").value("Mock reissue failed"));
+                .andExpect(jsonPath("$.reason").value("Mock-перевыпуск не выполнен"));
     }
 
     @Test
@@ -171,8 +223,8 @@ class MockPartnerControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.error").value("Bad Request"))
-                .andExpect(jsonPath("$.message").value("originalTicketUid must not be blank"))
+                .andExpect(jsonPath("$.error").value("Некорректный запрос"))
+                .andExpect(jsonPath("$.message").value("UID исходного билета не должен быть пустым"))
                 .andExpect(jsonPath("$.status").value(400));
     }
 
@@ -187,7 +239,7 @@ class MockPartnerControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.message").value("buyerEmail must not be blank"));
+                .andExpect(jsonPath("$.message").value("Почта покупателя не должна быть пустой"));
     }
 
     @Test
@@ -224,8 +276,8 @@ class MockPartnerControllerTest {
                         .content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.error").value("Bad Request"))
-                .andExpect(jsonPath("$.message").value("ticketUid must not be blank"))
+                .andExpect(jsonPath("$.error").value("Некорректный запрос"))
+                .andExpect(jsonPath("$.message").value("UID билета не должен быть пустым"))
                 .andExpect(jsonPath("$.status").value(400));
     }
 
@@ -240,7 +292,7 @@ class MockPartnerControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.message").value("ticketUid must not be blank"));
+                .andExpect(jsonPath("$.message").value("UID билета не должен быть пустым"));
     }
 
     @Test
@@ -254,7 +306,7 @@ class MockPartnerControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.message").value("ticketUid must not be blank"));
+                .andExpect(jsonPath("$.message").value("UID билета не должен быть пустым"));
     }
 
     @Test
@@ -268,7 +320,7 @@ class MockPartnerControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.message").value("ticketUid must not be blank"));
+                .andExpect(jsonPath("$.message").value("UID билета не должен быть пустым"));
     }
 
     @Test
@@ -278,8 +330,8 @@ class MockPartnerControllerTest {
                         .content(""))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.error").value("Bad Request"))
-                .andExpect(jsonPath("$.message").value("Request body must not be empty"))
+                .andExpect(jsonPath("$.error").value("Некорректный запрос"))
+                .andExpect(jsonPath("$.message").value("Тело запроса не должно быть пустым"))
                 .andExpect(jsonPath("$.status").value(400));
     }
 
@@ -290,8 +342,8 @@ class MockPartnerControllerTest {
                         .content("{"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.error").value("Bad Request"))
-                .andExpect(jsonPath("$.message").value("Malformed JSON request"))
+                .andExpect(jsonPath("$.error").value("Некорректный запрос"))
+                .andExpect(jsonPath("$.message").value("Некорректный JSON в запросе"))
                 .andExpect(jsonPath("$.status").value(400));
     }
 
@@ -302,8 +354,8 @@ class MockPartnerControllerTest {
                         .content("{"))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.error").value("Not Found"))
-                .andExpect(jsonPath("$.message").value("Organizer not found: org3"))
+                .andExpect(jsonPath("$.error").value("Не найдено"))
+                .andExpect(jsonPath("$.message").value("Организатор не найден: org3"))
                 .andExpect(jsonPath("$.status").value(404));
     }
 
@@ -314,8 +366,8 @@ class MockPartnerControllerTest {
                         .content("{"))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.error").value("Not Found"))
-                .andExpect(jsonPath("$.message").value("Organizer not found: org3"))
+                .andExpect(jsonPath("$.error").value("Не найдено"))
+                .andExpect(jsonPath("$.message").value("Организатор не найден: org3"))
                 .andExpect(jsonPath("$.status").value(404));
     }
 }

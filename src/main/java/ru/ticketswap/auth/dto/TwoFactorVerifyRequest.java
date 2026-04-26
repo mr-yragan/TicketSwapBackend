@@ -5,11 +5,11 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record TwoFactorVerifyRequest(
-        @NotBlank(message = "Challenge ID is required")
-        @Size(max = 64, message = "Challenge ID must be at most 64 characters")
+        @NotBlank(message = "ID проверки обязателен")
+        @Size(max = 64, message = "ID проверки должен быть не длиннее 64 символов")
         String challengeId,
-        @NotBlank(message = "Code is required")
-        @Pattern(regexp = "^\\d{6}$", message = "Code must contain exactly 6 digits")
+        @NotBlank(message = "Код обязателен")
+        @Pattern(regexp = "^\\d{6}$", message = "Код должен содержать ровно 6 цифр")
         String code
 ) {
 }

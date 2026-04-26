@@ -33,8 +33,8 @@ public record ApiError(
         }
 
         if (fields.isEmpty()) {
-            return ApiError.of(400, "Bad Request", "Validation failed", path);
+            return ApiError.of(400, "Некорректный запрос", "Ошибка валидации", path);
         }
-        return ApiError.of(400, "Bad Request", "Validation failed", path, fields);
+        return ApiError.of(400, "Некорректный запрос", "Ошибка валидации", path, fields);
     }
 }
