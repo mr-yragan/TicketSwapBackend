@@ -17,6 +17,8 @@ public class TicketSwapProperties {
     private final Mail mail = new Mail();
     private final PartnerApi partnerApi = new PartnerApi();
     private final Search search = new Search();
+    private final MockPartner mockPartner = new MockPartner();
+    private final Bootstrap bootstrap = new Bootstrap();
 
     public Security getSecurity() {
         return security;
@@ -40,6 +42,14 @@ public class TicketSwapProperties {
 
     public Search getSearch() {
         return search;
+    }
+
+    public MockPartner getMockPartner() {
+        return mockPartner;
+    }
+
+    public Bootstrap getBootstrap() {
+        return bootstrap;
     }
 
     public static class Security {
@@ -314,6 +324,66 @@ public class TicketSwapProperties {
         }
     }
 
+
+    public static class MockPartner {
+        
+        private String internalToken;
+
+        public String getInternalToken() {
+            return internalToken;
+        }
+
+        public void setInternalToken(String internalToken) {
+            this.internalToken = internalToken;
+        }
+    }
+
+    public static class Bootstrap {
+        private final Admin admin = new Admin();
+
+        public Admin getAdmin() {
+            return admin;
+        }
+
+        public static class Admin {
+            private boolean enabled = false;
+            private String email;
+            private String login;
+            private String password;
+
+            public boolean isEnabled() {
+                return enabled;
+            }
+
+            public void setEnabled(boolean enabled) {
+                this.enabled = enabled;
+            }
+
+            public String getEmail() {
+                return email;
+            }
+
+            public void setEmail(String email) {
+                this.email = email;
+            }
+
+            public String getLogin() {
+                return login;
+            }
+
+            public void setLogin(String login) {
+                this.login = login;
+            }
+
+            public String getPassword() {
+                return password;
+            }
+
+            public void setPassword(String password) {
+                this.password = password;
+            }
+        }
+    }
 
     public static class Search {
         private final Elasticsearch elasticsearch = new Elasticsearch();

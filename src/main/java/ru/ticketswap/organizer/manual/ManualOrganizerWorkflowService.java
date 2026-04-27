@@ -16,6 +16,7 @@ import ru.ticketswap.ticket.history.ListingStatusHistoryService;
 import ru.ticketswap.user.User;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Service
 public class ManualOrganizerWorkflowService {
@@ -24,6 +25,7 @@ public class ManualOrganizerWorkflowService {
     private static final String MANUAL_VALIDATION_REJECTED_REASON = "Организатор вручную отклонил билет";
     private static final String MANUAL_REISSUE_COMPLETED_REASON = "Организатор вручную аннулировал старый билет и загрузил новый билет для покупателя";
     private static final String MANUAL_REISSUE_REJECTED_REASON = "Организатор не смог вручную перевыпустить билет";
+    private static final Pattern SAFE_TICKET_UID = Pattern.compile("^[A-Za-z0-9_.:-]{4,128}$");
 
     private final TicketRepository ticketRepository;
     private final ListingStatusHistoryService listingStatusHistoryService;
@@ -68,6 +70,7 @@ public class ManualOrganizerWorkflowService {
         }
 
         if (approved) {
+            ensureListingHasFile(listing);
             return listingStatusHistoryService.transition(
                     listing,
                     TicketStatus.PENDING_RECIPIENT,
@@ -98,11 +101,9 @@ public class ManualOrganizerWorkflowService {
         if (listing.getStatus() != TicketStatus.PROCESSING || listing.getBuyer() == null) {
             throw new BusinessRuleException("Билет не ожидает ручного перевыпуска");
         }
-        if (newTicketUid == null || newTicketUid.isBlank()) {
-            throw new BusinessRuleException("UID нового билета обязателен");
-        }
 
-        listing.setReissuedTicketUid(newTicketUid.trim());
+        String normalizedNewTicketUid = normalizeNewTicketUid(listing, newTicketUid);
+        listing.setReissuedTicketUid(normalizedNewTicketUid);
         ticketFileStorageService.uploadReissuedTicketFile(listing, ticketFile);
         TicketLot saved = listingStatusHistoryService.transition(
                 listing,
@@ -149,6 +150,26 @@ public class ManualOrganizerWorkflowService {
         if (organizer.isBanned()) {
             throw new BusinessRuleException("Организатор заблокирован");
         }
+    }
+
+    private void ensureListingHasFile(TicketLot listing) {
+        if (listing.getTicketFiles() == null || listing.getTicketFiles().isEmpty()) {
+            throw new BusinessRuleException("Нельзя подтвердить объявление без файла билета");
+        }
+    }
+
+    private String normalizeNewTicketUid(TicketLot listing, String newTicketUid) {
+        if (newTicketUid == null || newTicketUid.isBlank()) {
+            throw new BusinessRuleException("UID нового билета обязателен");
+        }
+        String normalized = newTicketUid.trim();
+        if (!SAFE_TICKET_UID.matcher(normalized).matches()) {
+            throw new BusinessRuleException("UID нового билета должен быть от 4 до 128 символов и содержать только буквы, цифры, точку, подчёркивание, дефис или двоеточие");
+        }
+        if (normalized.equalsIgnoreCase(listing.getUid())) {
+            throw new BusinessRuleException("UID нового билета не должен совпадать со старым UID");
+        }
+        return normalized;
     }
 
     private String buildReason(String base, String comment) {

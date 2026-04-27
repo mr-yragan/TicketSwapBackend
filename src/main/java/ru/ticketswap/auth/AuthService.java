@@ -88,7 +88,7 @@ public class AuthService {
         }
 
         if (!user.isTwoFactorEnabled()) {
-            return LoginResponse.authenticated(jwtService.generate(user.getEmail()));
+            return LoginResponse.authenticated(jwtService.generate(user));
         }
 
         TwoFactorService.PendingTwoFactorChallenge challenge = twoFactorService.createChallenge(user);
@@ -98,7 +98,7 @@ public class AuthService {
 
     public AuthResponse verifyTwoFactor(TwoFactorVerifyRequest request) {
         User user = twoFactorService.verifyCode(request.challengeId(), request.code());
-        return new AuthResponse(jwtService.generate(user.getEmail()));
+        return new AuthResponse(jwtService.generate(user));
     }
 
     public LoginResponse resendTwoFactor(TwoFactorResendRequest request) {

@@ -19,9 +19,6 @@ public class UserIdentityService {
     private static final Logger log = LoggerFactory.getLogger(UserIdentityService.class);
 
     private static final Pattern LOGIN_PATTERN = Pattern.compile("^[A-Za-z0-9_.-]{3,32}$");
-    private static final Pattern PHONE_LIKE_LOGIN_PATTERN = Pattern.compile("^[0-9-]{5,32}$");
-    private static final String PHONE_CHARS_REGEX = "^[+0-9 ()-]+$";
-    private static final String DIGITS_ONLY_REGEX = "\\D";
 
     private final UserRepository userRepository;
 
@@ -53,30 +50,7 @@ public class UserIdentityService {
                     "Логин может содержать только буквы, цифры, нижнее подчёркивание, точку и дефис, длина от 3 до 32 символов"
             );
         }
-        if (PHONE_LIKE_LOGIN_PATTERN.matcher(normalized).matches() || isPhoneLike(normalized)) {
-            throw new IllegalArgumentException("Логин не должен выглядеть как номер телефона");
-        }
         return normalized;
-    }
-
-    public String normalizePhone(String phoneNumber) {
-        if (phoneNumber == null) {
-            return null;
-        }
-
-        String trimmed = phoneNumber.trim();
-        if (!trimmed.matches(PHONE_CHARS_REGEX)) {
-            throw new IllegalArgumentException("Номер телефона содержит недопустимые символы");
-        }
-
-        String digits = trimmed.replaceAll(DIGITS_ONLY_REGEX, "");
-        if (digits.isEmpty()) {
-            throw new IllegalArgumentException("Номер телефона должен содержать цифры");
-        }
-        if (digits.length() < 5 || digits.length() > 32) {
-            throw new IllegalArgumentException("Номер телефона должен содержать от 5 до 32 цифр");
-        }
-        return "+" + digits;
     }
 
     public UserDetails loadUserDetailsByIdentifier(String identifier) {
@@ -131,46 +105,10 @@ public class UserIdentityService {
                 .ifPresent(other -> {
                     throw new ConflictException("Логин уже используется");
                 });
-
-        userRepository.findByPhoneNumber(normalizedLogin)
-                .filter(other -> isDifferentUser(other, currentUserId))
-                .ifPresent(other -> {
-                    throw new ConflictException("Логин конфликтует с существующим номером телефона");
-                });
-    }
-
-    public void assertPhoneAvailable(String phoneNumber, Long currentUserId) {
-        String normalizedPhone = normalizePhone(phoneNumber);
-
-        userRepository.findByPhoneNumber(normalizedPhone)
-                .filter(other -> isDifferentUser(other, currentUserId))
-                .ifPresent(other -> {
-                    throw new ConflictException("Номер телефона уже используется");
-                });
-
-        userRepository.findByLogin(normalizedPhone)
-                .filter(other -> isDifferentUser(other, currentUserId))
-                .ifPresent(other -> {
-                    throw new ConflictException("Номер телефона конфликтует с существующим логином");
-                });
     }
 
     public boolean isEmailIdentifier(String identifier) {
         return identifier != null && identifier.contains("@");
-    }
-
-    public boolean isPhoneLike(String identifier) {
-        if (identifier == null) {
-            return false;
-        }
-
-        String trimmed = identifier.trim();
-        if (!trimmed.matches(PHONE_CHARS_REGEX)) {
-            return false;
-        }
-
-        int digitsCount = trimmed.replaceAll(DIGITS_ONLY_REGEX, "").length();
-        return digitsCount >= 5 && digitsCount <= 32;
     }
 
     private Optional<User> findUserByIdentifier(String identifier) {
@@ -185,10 +123,6 @@ public class UserIdentityService {
 
         if (isEmailIdentifier(trimmed)) {
             return findUserByEmail(trimmed);
-        }
-
-        if (isPhoneLike(trimmed)) {
-            return userRepository.findByPhoneNumber(normalizePhone(trimmed));
         }
 
         return userRepository.findByLogin(trimmed);

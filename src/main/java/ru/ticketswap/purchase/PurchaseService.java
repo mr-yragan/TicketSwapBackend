@@ -29,7 +29,6 @@ import java.util.Optional;
 public class PurchaseService {
 
     private static final long DEFAULT_HOLD_SECONDS = 5 * 60;
-    private static final long MOCK_PAYMENT_DELAY_MS = 2_000;
     private static final String MANUAL_REISSUE_WAITING_REASON = "Оплата условно подтверждена; ожидает ручного аннулирования старого билета и загрузки нового билета организатором";
 
     private final TicketRepository ticketRepository;
@@ -64,14 +63,12 @@ public class PurchaseService {
     }
 
     public TicketLot buyNow(Long listingId, User buyer) {
-        tx.executeWithoutResult(status -> startProcessingTx(listingId, buyer));
-
-        try {
-            Thread.sleep(MOCK_PAYMENT_DELAY_MS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new BusinessRuleException("Платёж был прерван");
+        TicketLot alreadyCompleted = tx.execute(status -> loadCompletedPurchaseIfAlreadyBought(listingId, buyer));
+        if (alreadyCompleted != null) {
+            return alreadyCompleted;
         }
+
+        tx.executeWithoutResult(status -> startProcessingTx(listingId, buyer));
 
         if (requiresManualReissue(listingId)) {
             return tx.execute(status -> markWaitingManualReissueTx(listingId, buyer));
@@ -85,6 +82,15 @@ public class PurchaseService {
         return tx.execute(status -> completePurchaseTx(listingId, buyer, reissueResult.reissuedTicketUid()));
     }
 
+    private TicketLot loadCompletedPurchaseIfAlreadyBought(Long listingId, User buyer) {
+        TicketLot listing = ticketRepository.findByIdForUpdate(listingId)
+                .orElseThrow(() -> new NotFoundException("Билет не найден"));
+        if (listing.getStatus() == TicketStatus.COMPLETED && isBuyer(listing, buyer)) {
+            return listing;
+        }
+        return null;
+    }
+
     private ListingHold createHoldTx(Long listingId, User buyer) {
         TicketLot listing = loadListingForPurchase(listingId, buyer);
 
@@ -95,7 +101,7 @@ public class PurchaseService {
             boolean active = hold.getHoldUntil() != null && hold.getHoldUntil().isAfter(now);
 
             if (active) {
-                if (hold.getBuyer() != null && hold.getBuyer().getId() != null && hold.getBuyer().getId().equals(buyer.getId())) {
+                if (isHoldOwner(hold, buyer)) {
                     return hold;
                 }
                 throw new ConflictException("Билет зарезервирован другим покупателем");
@@ -121,7 +127,7 @@ public class PurchaseService {
         }
 
         ListingHold hold = existing.get();
-        if (hold.getBuyer() == null || hold.getBuyer().getId() == null || !hold.getBuyer().getId().equals(buyer.getId())) {
+        if (!isHoldOwner(hold, buyer)) {
             throw new ConflictException("Нельзя отменить резерв, созданный другим пользователем");
         }
 
@@ -137,19 +143,12 @@ public class PurchaseService {
             throw new ConflictException("Резерв истёк");
         }
 
-        if (listing.getStatus() == TicketStatus.PROCESSING) {
-            if (listing.getBuyer() != null && listing.getBuyer().getId() != null && listing.getBuyer().getId().equals(buyer.getId())) {
-                return;
-            }
-            throw new ConflictException("Билет уже покупается");
-        }
-
         listing.setBuyer(buyer);
         listingStatusHistoryService.transition(listing, TicketStatus.PROCESSING, "Покупка начата", buyer);
     }
 
     private TicketLot markWaitingManualReissueTx(Long listingId, User buyer) {
-        TicketLot listing = ticketRepository.findById(listingId)
+        TicketLot listing = ticketRepository.findByIdForUpdate(listingId)
                 .orElseThrow(() -> new NotFoundException("Билет не найден"));
 
         ensureProcessingBuyer(listing, buyer);
@@ -164,22 +163,23 @@ public class PurchaseService {
     }
 
     private TicketLot completePurchaseTx(Long listingId, User buyer, String reissuedTicketUid) {
-        TicketLot listing = ticketRepository.findById(listingId)
+        TicketLot listing = ticketRepository.findByIdForUpdate(listingId)
                 .orElseThrow(() -> new NotFoundException("Билет не найден"));
 
         if (listing.getStatus() == TicketStatus.COMPLETED) {
-            return listing;
+            if (isBuyer(listing, buyer)) {
+                return listing;
+            }
+            throw new ConflictException("Билет уже продан другому покупателю");
         }
+
+        ensureProcessingBuyer(listing, buyer);
 
         ListingHold hold = listingHoldRepository.findByListingIdAndHoldUntilAfter(listingId, Instant.now())
                 .orElseThrow(() -> new ConflictException("Нет активного резерва для этого объявления"));
 
-        if (hold.getBuyer() == null || hold.getBuyer().getId() == null || !hold.getBuyer().getId().equals(buyer.getId())) {
+        if (!isHoldOwner(hold, buyer)) {
             throw new ConflictException("Это объявление зарезервировано другим покупателем");
-        }
-
-        if (listing.getBuyer() == null || listing.getBuyer().getId() == null || !listing.getBuyer().getId().equals(buyer.getId())) {
-            listing.setBuyer(buyer);
         }
 
         listing.setReissuedTicketUid(reissuedTicketUid);
@@ -192,8 +192,12 @@ public class PurchaseService {
     }
 
     private TicketLot failPurchaseTx(Long listingId, User buyer, String reason) {
-        TicketLot listing = ticketRepository.findById(listingId)
+        TicketLot listing = ticketRepository.findByIdForUpdate(listingId)
                 .orElseThrow(() -> new NotFoundException("Билет не найден"));
+
+        if (listing.getStatus() == TicketStatus.COMPLETED) {
+            return listing;
+        }
 
         if (listing.getBuyer() == null || listing.getBuyer().getId() == null || !listing.getBuyer().getId().equals(buyer.getId())) {
             listing.setBuyer(buyer);
@@ -247,9 +251,25 @@ public class PurchaseService {
         if (listing.getStatus() != TicketStatus.PROCESSING) {
             throw new BusinessRuleException("Покупка не находится в обработке");
         }
-        if (listing.getBuyer() == null || listing.getBuyer().getId() == null || !listing.getBuyer().getId().equals(buyer.getId())) {
+        if (!isBuyer(listing, buyer)) {
             throw new ConflictException("Это объявление обрабатывается для другого покупателя");
         }
+    }
+
+    private boolean isBuyer(TicketLot listing, User buyer) {
+        return buyer != null
+                && buyer.getId() != null
+                && listing.getBuyer() != null
+                && listing.getBuyer().getId() != null
+                && listing.getBuyer().getId().equals(buyer.getId());
+    }
+
+    private boolean isHoldOwner(ListingHold hold, User buyer) {
+        return buyer != null
+                && buyer.getId() != null
+                && hold.getBuyer() != null
+                && hold.getBuyer().getId() != null
+                && hold.getBuyer().getId().equals(buyer.getId());
     }
 
     private String failureReason(String reason) {
@@ -260,18 +280,18 @@ public class PurchaseService {
     }
 
     private TicketLot loadListingForPurchase(Long listingId, User buyer) {
-        TicketLot listing = ticketRepository.findById(listingId)
+        TicketLot listing = ticketRepository.findByIdForUpdate(listingId)
                 .orElseThrow(() -> new NotFoundException("Билет не найден"));
 
         if (listing.getStatus() == TicketStatus.COMPLETED) {
+            if (isBuyer(listing, buyer)) {
+                throw new ConflictException("Покупка уже завершена для этого пользователя");
+            }
             throw new BusinessRuleException("Билет уже продан");
         }
 
         if (listing.getStatus() == TicketStatus.PROCESSING) {
-            if (listing.getBuyer() != null && listing.getBuyer().getId() != null && listing.getBuyer().getId().equals(buyer.getId())) {
-                return listing;
-            }
-            throw new ConflictException("Билет уже покупается");
+            throw new ConflictException("Покупка этого билета уже обрабатывается");
         }
 
         if (listing.getStatus() != TicketStatus.PENDING_RECIPIENT) {

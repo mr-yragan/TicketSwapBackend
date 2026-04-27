@@ -73,6 +73,7 @@ public class AdminOrganizerService {
 
         Organizer organizer = organizerRepository.save(new Organizer(name, apiKey, contactEmail, verificationMode));
         user.setRole(ORGANIZER_ROLE);
+        user.incrementTokenVersion();
         userRepository.save(user);
 
         return organizer;

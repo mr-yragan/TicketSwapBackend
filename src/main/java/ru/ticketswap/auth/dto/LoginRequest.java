@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 public record LoginRequest(
-        @JsonAlias({"username", "login", "email", "phone", "phoneNumber"})
+        @JsonAlias({"username", "login", "email"})
         @NotBlank(message = "Идентификатор обязателен")
         @Size(max = 255, message = "Идентификатор должен быть не длиннее 255 символов")
         String identifier,

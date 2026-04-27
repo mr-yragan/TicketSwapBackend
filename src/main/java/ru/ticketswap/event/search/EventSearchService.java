@@ -195,9 +195,7 @@ public class EventSearchService {
         propertiesMap.put("startsAt", Map.of("type", "date"));
         propertiesMap.put("date", Map.of("type", "date", "format", "strict_date"));
         propertiesMap.put("organizerId", Map.of("type", "long"));
-        propertiesMap.put("organizerName", searchAsYouType);
-        propertiesMap.put("organizerApiKey", keyword);
-        propertiesMap.put("organizerVerificationMode", keyword);
+        propertiesMap.put("organizerName", searchAsYouType);        propertiesMap.put("organizerVerificationMode", keyword);
         propertiesMap.put("venueId", Map.of("type", "long"));
         propertiesMap.put("venueName", searchAsYouType);
         propertiesMap.put("venueAddress", text);
@@ -271,9 +269,7 @@ public class EventSearchService {
                 Map.entry("startsAt", event.getStartsAt().toString()),
                 Map.entry("date", event.getDate().toString()),
                 Map.entry("organizerId", organizer.getId()),
-                Map.entry("organizerName", safe(organizer.getName())),
-                Map.entry("organizerApiKey", safe(organizer.getApiKey())),
-                Map.entry("organizerVerificationMode", organizer.getVerificationMode().name()),
+                Map.entry("organizerName", safe(organizer.getName())),                Map.entry("organizerVerificationMode", organizer.getVerificationMode().name()),
                 Map.entry("venueId", venue.getId()),
                 Map.entry("venueName", safe(venue.getName())),
                 Map.entry("venueAddress", safe(venue.getAddress())),
@@ -290,9 +286,7 @@ public class EventSearchService {
             String name = asString(source.get("name"));
             Instant startsAt = Instant.parse(asString(source.get("startsAt")));
             String dateText = asString(source.get("date"));
-            String organizerName = asString(source.get("organizerName"));
-            String organizerApiKey = asString(source.get("organizerApiKey"));
-            String organizerVerificationMode = asString(source.get("organizerVerificationMode"));
+            String organizerName = asString(source.get("organizerName"));            String organizerVerificationMode = asString(source.get("organizerVerificationMode"));
             String venueName = asString(source.get("venueName"));
             String venueAddress = asString(source.get("venueAddress"));
             String venueTimezone = asString(source.get("venueTimezone"));
@@ -303,7 +297,7 @@ public class EventSearchService {
                     name,
                     startsAt,
                     java.time.LocalDate.parse(dateText),
-                    new EventSearchResponse.OrganizerInfo(organizerId, organizerName, organizerApiKey, organizerVerificationMode),
+                    new EventSearchResponse.OrganizerInfo(organizerId, organizerName, organizerVerificationMode),
                     new EventSearchResponse.VenueInfo(venueId, venueName, venueAddress, venueTimezone),
                     new EventSearchResponse.ListingDefaults(
                             id,

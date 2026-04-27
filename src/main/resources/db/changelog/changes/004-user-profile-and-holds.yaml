@@ -9,9 +9,6 @@ databaseChangeLog:
               - column:
                   name: login
                   type: varchar(32)
-              - column:
-                  name: phone_number
-                  type: varchar(32)
         - addUniqueConstraint:
             tableName: users
             columnNames: login

@@ -86,6 +86,7 @@ public class PasswordResetService {
 
         User user = resetToken.getUser();
         user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.incrementTokenVersion();
         resetToken.markConsumed(now);
         passwordResetTokenRepository.invalidateActiveTokens(user.getId(), now);
         twoFactorService.invalidateChallengesForUser(user.getId());

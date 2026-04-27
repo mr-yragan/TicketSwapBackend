@@ -67,7 +67,7 @@ public class ListingLifecycleService {
         if (context.organizerCode() == null) {
             outcome = PartnerValidationOutcome.failure(PARTNER_VALIDATION_UNSUPPORTED_ORGANIZER_REASON);
         } else {
-            outcome = callPartnerApi(context.organizerCode(), context.ticketUid());
+            outcome = callPartnerApi(context.organizerCode(), context.ticketUid(), context.eventId());
         }
 
         return tx.execute(status -> applyPartnerValidationOutcome(listingId, outcome));
@@ -110,7 +110,7 @@ public class ListingLifecycleService {
                     MANUAL_VALIDATION_WAITING_REASON,
                     null
             );
-            return new ValidationContext(lot.getUid(), null, true);
+            return new ValidationContext(lot.getUid(), null, resolveEventId(lot), true);
         }
 
         String organizerCode = organizer.getApiKey();
@@ -118,13 +118,16 @@ public class ListingLifecycleService {
             organizerCode = partnerOrganizerCodeMapper.resolveOrganizerCode(lot.getOrganizerName()).orElse(null);
         }
 
-        return new ValidationContext(lot.getUid(), organizerCode, false);
+        return new ValidationContext(lot.getUid(), organizerCode, resolveEventId(lot), false);
     }
 
-    private PartnerValidationOutcome callPartnerApi(String organizerCode, String ticketUid) {
+    private PartnerValidationOutcome callPartnerApi(String organizerCode, String ticketUid, String eventId) {
         try {
-            PartnerTicketVerifyResponse response = partnerApiClient.verifyTicket(organizerCode, ticketUid);
+            PartnerTicketVerifyResponse response = partnerApiClient.verifyTicket(organizerCode, ticketUid, eventId);
             if (response.valid()) {
+                if (eventId != null && response.eventId() != null && !eventId.equalsIgnoreCase(response.eventId())) {
+                    return PartnerValidationOutcome.failure("Проверка партнёра не пройдена: билет относится к другому мероприятию");
+                }
                 return PartnerValidationOutcome.success();
             }
 
@@ -157,7 +160,14 @@ public class ListingLifecycleService {
         return listingStatusHistoryService.transition(lot, TicketStatus.FAILED, outcome.reason(), null);
     }
 
-    private record ValidationContext(String ticketUid, String organizerCode, boolean manual) {
+    private String resolveEventId(TicketLot lot) {
+        if (lot.getEvent() == null || lot.getEvent().getEventId() == null || lot.getEvent().getEventId().isBlank()) {
+            return null;
+        }
+        return lot.getEvent().getEventId().trim();
+    }
+
+    private record ValidationContext(String ticketUid, String organizerCode, String eventId, boolean manual) {
     }
 
     private record PartnerValidationOutcome(boolean passed, String reason) {

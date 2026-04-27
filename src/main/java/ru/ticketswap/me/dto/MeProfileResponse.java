@@ -7,7 +7,6 @@ public record MeProfileResponse(
         String email,
         boolean emailVerified,
         String login,
-        String phoneNumber,
         String role,
         boolean twoFactorEnabled,
         Instant createdAt

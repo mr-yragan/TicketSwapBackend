@@ -1,5 +1,6 @@
 package ru.ticketswap.ticket;
 
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;
@@ -10,6 +11,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import ru.ticketswap.hold.ListingHold;
@@ -31,6 +35,9 @@ public interface TicketRepository extends JpaRepository<TicketLot, Long>, JpaSpe
     @EntityGraph(attributePaths = {"seller", "buyer", "ticketFiles", "organizer", "event"})
     Optional<TicketLot> findById(Long id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select distinct t from TicketLot t left join fetch t.seller left join fetch t.buyer left join fetch t.ticketFiles left join fetch t.organizer left join fetch t.event where t.id = :id")
+    Optional<TicketLot> findByIdForUpdate(@Param("id") Long id);
     @EntityGraph(attributePaths = {"seller", "buyer", "ticketFiles", "organizer", "event"})
     List<TicketLot> findAllBySellerIdOrderByCreatedAtDesc(Long sellerId);
 

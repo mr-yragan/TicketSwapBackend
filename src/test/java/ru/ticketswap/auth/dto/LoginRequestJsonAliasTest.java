@@ -26,18 +26,18 @@ class LoginRequestJsonAliasTest {
     }
 
     @Test
-    void deserializesLegacyPhoneFieldIntoIdentifier() throws Exception {
+    void deserializesEmailFieldIntoIdentifier() throws Exception {
         LoginRequest request = objectMapper.readValue(
                 """
                 {
-                  "phoneNumber": "+7 (999) 123-45-67",
+                  "email": "user@example.com",
                   "password": "password123"
                 }
                 """,
                 LoginRequest.class
         );
 
-        assertEquals("+7 (999) 123-45-67", request.identifier());
+        assertEquals("user@example.com", request.identifier());
         assertEquals("password123", request.password());
     }
 }

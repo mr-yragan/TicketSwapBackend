@@ -7,26 +7,34 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import ru.ticketswap.config.MockPartnerInternalAuthFilter;
+import ru.ticketswap.config.TicketSwapProperties;
 
 @Component
 public class HttpPartnerApiClient implements PartnerApiClient {
 
     private final RestClient restClient;
+    private final String mockPartnerInternalToken;
 
-    public HttpPartnerApiClient(@Qualifier("partnerApiRestClient") RestClient restClient) {
+    public HttpPartnerApiClient(
+            @Qualifier("partnerApiRestClient") RestClient restClient,
+            TicketSwapProperties properties
+    ) {
         this.restClient = restClient;
+        this.mockPartnerInternalToken = properties.getMockPartner().getInternalToken();
     }
 
     @Override
-    public PartnerTicketVerifyResponse verifyTicket(String organizerCode, String ticketUid) {
+    public PartnerTicketVerifyResponse verifyTicket(String organizerCode, String ticketUid, String eventId) {
         validateRequiredArgument("organizerCode", organizerCode);
         validateRequiredArgument("ticketUid", ticketUid);
 
         try {
             PartnerTicketVerifyResponse response = restClient.post()
                     .uri("/api/mock/partners/{organizerCode}/tickets/verify", organizerCode)
+                    .header(MockPartnerInternalAuthFilter.INTERNAL_TOKEN_HEADER, mockPartnerInternalToken)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(new PartnerTicketVerifyRequest(ticketUid))
+                    .body(new PartnerTicketVerifyRequest(ticketUid, eventId))
                     .retrieve()
                     .body(PartnerTicketVerifyResponse.class);
 
@@ -54,6 +62,7 @@ public class HttpPartnerApiClient implements PartnerApiClient {
         try {
             PartnerTicketReissueResponse response = restClient.post()
                     .uri("/api/mock/partners/{organizerCode}/tickets/reissue", organizerCode)
+                    .header(MockPartnerInternalAuthFilter.INTERNAL_TOKEN_HEADER, mockPartnerInternalToken)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(new PartnerTicketReissueRequest(originalTicketUid, buyerEmail))
                     .retrieve()

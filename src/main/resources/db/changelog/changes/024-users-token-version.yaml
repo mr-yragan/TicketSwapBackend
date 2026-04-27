@@ -1,0 +1,14 @@
+databaseChangeLog:
+  - changeSet:
+      id: 024-add-users-token-version
+      author: vanya
+      changes:
+        - addColumn:
+            tableName: users
+            columns:
+              - column:
+                  name: token_version
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false

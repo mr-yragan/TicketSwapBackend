@@ -9,7 +9,7 @@ import java.time.Instant;
         name = "users",
         uniqueConstraints = {
                 @UniqueConstraint(columnNames = "email"),
-                @UniqueConstraint(columnNames = "phone_number")
+                @UniqueConstraint(columnNames = "login")
         }
 )
 public class User {
@@ -27,9 +27,6 @@ public class User {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
-    @Column(name = "phone_number", unique = true, length = 33)
-    private String phoneNumber;
-
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified;
 
@@ -42,6 +39,9 @@ public class User {
     @Column(name = "two_factor_enabled", nullable = false)
     private boolean twoFactorEnabled;
 
+    @Column(name = "token_version", nullable = false)
+    private int tokenVersion;
+
     protected User() {
     }
 
@@ -50,6 +50,7 @@ public class User {
         this.passwordHash = passwordHash;
         this.role = "USER";
         this.emailVerified = false;
+        this.tokenVersion = 0;
     }
 
     @PrePersist
@@ -84,14 +85,6 @@ public class User {
         this.passwordHash = passwordHash;
     }
 
-    public String getPhoneNumber() {
-        return phoneNumber;
-    }
-
-    public void setPhoneNumber(String phoneNumber) {
-        this.phoneNumber = phoneNumber;
-    }
-
     public boolean isEmailVerified() {
         return emailVerified;
     }
@@ -118,5 +111,17 @@ public class User {
 
     public void setTwoFactorEnabled(boolean twoFactorEnabled) {
         this.twoFactorEnabled = twoFactorEnabled;
+    }
+
+    public int getTokenVersion() {
+        return tokenVersion;
+    }
+
+    public void setTokenVersion(int tokenVersion) {
+        this.tokenVersion = tokenVersion;
+    }
+
+    public void incrementTokenVersion() {
+        this.tokenVersion++;
     }
 }

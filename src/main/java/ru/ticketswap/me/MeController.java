@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import ru.ticketswap.auth.TwoFactorService;
 import ru.ticketswap.common.UnauthorizedException;
@@ -12,6 +13,7 @@ import ru.ticketswap.hold.ListingHoldRepository;
 import ru.ticketswap.me.dto.HoldResponse;
 import ru.ticketswap.me.dto.MeProfileResponse;
 import ru.ticketswap.me.dto.TwoFactorStatusResponse;
+import ru.ticketswap.me.dto.TwoFactorToggleRequest;
 import ru.ticketswap.me.dto.UpdateMeRequest;
 import ru.ticketswap.ticket.TicketLot;
 import ru.ticketswap.ticket.TicketRepository;
@@ -35,19 +37,22 @@ public class MeController {
     private final ListingHoldRepository listingHoldRepository;
     private final UserIdentityService userIdentityService;
     private final TwoFactorService twoFactorService;
+    private final PasswordEncoder passwordEncoder;
 
     public MeController(
             UserRepository userRepository,
             TicketRepository ticketRepository,
             ListingHoldRepository listingHoldRepository,
             UserIdentityService userIdentityService,
-            TwoFactorService twoFactorService
+            TwoFactorService twoFactorService,
+            PasswordEncoder passwordEncoder
     ) {
         this.userRepository = userRepository;
         this.ticketRepository = ticketRepository;
         this.listingHoldRepository = listingHoldRepository;
         this.userIdentityService = userIdentityService;
         this.twoFactorService = twoFactorService;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @GetMapping
@@ -69,12 +74,6 @@ public class MeController {
             user.setLogin(normalizedLogin);
         }
 
-        if (request.phoneNumber() != null && !request.phoneNumber().isBlank()) {
-            String normalizedPhone = userIdentityService.normalizePhone(request.phoneNumber());
-            userIdentityService.assertPhoneAvailable(normalizedPhone, user.getId());
-            user.setPhoneNumber(normalizedPhone);
-        }
-
         userRepository.save(user);
         return ResponseEntity.ok(toMeResponse(user));
     }
@@ -89,10 +88,13 @@ public class MeController {
 
     @PostMapping("/2fa/enable")
     public ResponseEntity<TwoFactorStatusResponse> enableTwoFactor(
-            @AuthenticationPrincipal UserDetails principal
+            @AuthenticationPrincipal UserDetails principal,
+            @Valid @RequestBody TwoFactorToggleRequest request
     ) {
         User user = requireUser(principal);
+        ensurePasswordMatches(user, request.password());
         user.setTwoFactorEnabled(true);
+        user.incrementTokenVersion();
         userRepository.save(user);
         twoFactorService.invalidateChallengesForUser(user.getId());
         return ResponseEntity.ok(new TwoFactorStatusResponse(true));
@@ -100,10 +102,13 @@ public class MeController {
 
     @PostMapping("/2fa/disable")
     public ResponseEntity<TwoFactorStatusResponse> disableTwoFactor(
-            @AuthenticationPrincipal UserDetails principal
+            @AuthenticationPrincipal UserDetails principal,
+            @Valid @RequestBody TwoFactorToggleRequest request
     ) {
         User user = requireUser(principal);
+        ensurePasswordMatches(user, request.password());
         user.setTwoFactorEnabled(false);
+        user.incrementTokenVersion();
         userRepository.save(user);
         twoFactorService.invalidateChallengesForUser(user.getId());
         return ResponseEntity.ok(new TwoFactorStatusResponse(false));
@@ -169,8 +174,14 @@ public class MeController {
         if (principal == null || principal.getUsername() == null) {
             throw new UnauthorizedException("Не авторизован");
         }
-        return userRepository.findByEmail(principal.getUsername())
+        return userRepository.findByEmailIgnoreCase(principal.getUsername())
                 .orElseThrow(() -> new UnauthorizedException("Не авторизован"));
+    }
+
+    private void ensurePasswordMatches(User user, String password) {
+        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+            throw new UnauthorizedException("Неверный пароль");
+        }
     }
 
     private MeProfileResponse toMeResponse(User user) {
@@ -179,7 +190,6 @@ public class MeController {
                 user.getEmail(),
                 user.isEmailVerified(),
                 user.getLogin(),
-                user.getPhoneNumber(),
                 user.getRole(),
                 user.isTwoFactorEnabled(),
                 user.getCreatedAt()

@@ -30,7 +30,6 @@ public record EventSearchResponse(
                 new OrganizerInfo(
                         organizer.getId(),
                         organizer.getName(),
-                        organizer.getApiKey(),
                         organizer.getVerificationMode().name()
                 ),
                 new VenueInfo(
@@ -54,7 +53,6 @@ public record EventSearchResponse(
     public record OrganizerInfo(
             Long id,
             String name,
-            String apiKey,
             String verificationMode
     ) {
     }

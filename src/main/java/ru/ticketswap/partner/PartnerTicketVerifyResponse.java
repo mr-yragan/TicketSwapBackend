@@ -4,6 +4,7 @@ public record PartnerTicketVerifyResponse(
         boolean valid,
         String ticketUid,
         String organizerCode,
+        String eventId,
         String reason
 ) {
 }

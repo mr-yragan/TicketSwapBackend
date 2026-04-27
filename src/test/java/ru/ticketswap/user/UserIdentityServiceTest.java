@@ -44,27 +44,17 @@ class UserIdentityServiceTest {
     }
 
     @Test
-    void loadUserDetailsByIdentifierUsesNormalizedPhone() {
+    void loadUserDetailsByIdentifierUsesLogin() {
         User user = new User("user@example.com", "hash");
-        user.setPhoneNumber("+79991234567");
+        user.setLogin("valid.user");
 
-        when(userRepository.findByPhoneNumber("+79991234567"))
+        when(userRepository.findByLogin("valid.user"))
                 .thenReturn(Optional.of(user));
 
-        UserDetails userDetails = userIdentityService.loadUserDetailsByIdentifier("+7 (999) 123-45-67");
+        UserDetails userDetails = userIdentityService.loadUserDetailsByIdentifier("valid.user");
 
         assertEquals("user@example.com", userDetails.getUsername());
-        verify(userRepository).findByPhoneNumber("+79991234567");
-    }
-
-    @Test
-    void normalizeLoginRejectsPhoneLikeValues() {
-        assertThrows(IllegalArgumentException.class, () -> userIdentityService.normalizeLogin("79991234567"));
-    }
-
-    @Test
-    void normalizeLoginRejectsHyphenOnlyPhoneLikeValues() {
-        assertThrows(IllegalArgumentException.class, () -> userIdentityService.normalizeLogin("-----"));
+        verify(userRepository).findByLogin("valid.user");
     }
 
     @Test
@@ -78,26 +68,19 @@ class UserIdentityServiceTest {
     }
 
     @Test
-    void normalizePhoneRejectsInvalidCharacters() {
-        assertThrows(IllegalArgumentException.class, () -> userIdentityService.normalizePhone("abc12345"));
-    }
-
-    @Test
-    void assertPhoneAvailableRejectsCollisionWithExistingLogin() {
+    void assertLoginAvailableRejectsCollision() {
         User other = new User("other@example.com", "hash");
-        other.setLogin("+79991234567");
+        other.setLogin("taken");
 
-        when(userRepository.findByPhoneNumber("+79991234567"))
-                .thenReturn(Optional.empty());
-        when(userRepository.findByLogin("+79991234567"))
+        when(userRepository.findByLogin("taken"))
                 .thenReturn(Optional.of(other));
 
         ConflictException ex = assertThrows(
                 ConflictException.class,
-                () -> userIdentityService.assertPhoneAvailable("+7 (999) 123-45-67", 42L)
+                () -> userIdentityService.assertLoginAvailable("taken", 42L)
         );
 
-        assertEquals("Номер телефона конфликтует с существующим логином", ex.getMessage());
+        assertEquals("Логин уже используется", ex.getMessage());
     }
 
     @Test

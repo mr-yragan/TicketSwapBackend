@@ -14,6 +14,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import ru.ticketswap.common.BusinessRuleException;
+import ru.ticketswap.common.ForbiddenException;
 import ru.ticketswap.event.Event;
 import ru.ticketswap.event.EventRepository;
 import ru.ticketswap.common.NotFoundException;
@@ -230,12 +231,12 @@ public class TicketController {
             @PathVariable("id") Long id,
             @AuthenticationPrincipal UserDetails userDetails
     ) {
-        TicketLot ticket = loadTicket(id);
-        User currentUser = tryLoadUser(userDetails);
-
-        if (!isVisibleForPublic(ticket) && !isSeller(ticket, currentUser) && !isBuyer(ticket, currentUser) && !isOrganizerForTicket(ticket, currentUser)) {
-            throw new NotFoundException("Билет не найден");
+        User currentUser = requireUser(userDetails);
+        if (!isAdmin(currentUser)) {
+            throw new ForbiddenException("История статусов доступна только администратору");
         }
+
+        loadTicket(id);
 
         List<ListingStatusHistoryResponse> response = listingStatusHistoryService.getHistory(id).stream()
                 .map(ListingStatusHistoryResponse::fromEntity)
@@ -249,10 +250,7 @@ public class TicketController {
             @Valid @RequestBody CreateTicketRequest request,
             @AuthenticationPrincipal UserDetails userDetails
     ) {
-        User seller = requireUser(userDetails);
-        TicketLot saved = createListing(request, seller);
-        saved = listingLifecycleService.validateListing(saved.getId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(toDetailsResponse(saved));
+        throw new BusinessRuleException("Продажа без файла запрещена: используйте multipart-запрос с ticketFile или ticketFiles");
     }
 
     @PostMapping(value = "/sell", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -263,8 +261,11 @@ public class TicketController {
             @AuthenticationPrincipal UserDetails userDetails
     ) {
         User seller = requireUser(userDetails);
-        TicketLot saved = createListing(request, seller);
         List<MultipartFile> files = collectFiles(ticketFiles, singleTicketFile);
+        if (files.isEmpty()) {
+            throw new BusinessRuleException("Требуется хотя бы один файл билета");
+        }
+        TicketLot saved = createListing(request, seller);
 
         try {
             if (!files.isEmpty()) {
@@ -682,6 +683,10 @@ public class TicketController {
         if (ticket.getStatus() != TicketStatus.COMPLETED || !isBuyer(ticket, currentUser)) {
             throw new UnauthorizedException("Новый билет доступен только покупателю после завершения сделки");
         }
+    }
+
+    private boolean isAdmin(User currentUser) {
+        return currentUser != null && "ADMIN".equalsIgnoreCase(currentUser.getRole());
     }
 
     private boolean isBuyer(TicketLot ticket, User currentUser) {

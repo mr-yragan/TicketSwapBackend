@@ -92,7 +92,6 @@ databaseChangeLog:
                   name: created_at
                   type: timestamp
                   defaultValueComputed: CURRENT_TIMESTAMP
-
   - include:
       file: changes/003-tickets-constraints.yaml
       relativeToChangelogFile: true
@@ -115,9 +114,6 @@ databaseChangeLog:
       file: changes/009-ticket-files-table.yaml
       relativeToChangelogFile: true
   - include:
-      file: changes/010-users-phone-unique.yaml
-      relativeToChangelogFile: true
-  - include:
       file: changes/011-users-identity-normalization.yaml
       relativeToChangelogFile: true
   - include:
@@ -130,16 +126,10 @@ databaseChangeLog:
       file: changes/014-password-reset-tokens.yaml
       relativeToChangelogFile: true
   - include:
-      file: changes/015-users-phone-number-length.yaml
-      relativeToChangelogFile: true
-  - include:
       file: changes/016-users-email-verification.yaml
       relativeToChangelogFile: true
   - include:
       file: changes/017-listing-status-history.yaml
-      relativeToChangelogFile: true
-  - include:
-      file: changes/018-mock-organizer-user.yaml
       relativeToChangelogFile: true
   - include:
       file: changes/019-tickets-reissued-ticket-uid.yaml
@@ -151,8 +141,8 @@ databaseChangeLog:
       file: changes/021-tickets-add-event-id.yaml
       relativeToChangelogFile: true
   - include:
-      file: changes/022-admin-user.yaml
+      file: changes/023-organizer-manual-workflow.yaml
       relativeToChangelogFile: true
   - include:
-      file: changes/023-organizer-manual-workflow.yaml
+      file: changes/024-users-token-version.yaml
       relativeToChangelogFile: true

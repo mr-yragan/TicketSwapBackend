@@ -75,15 +75,15 @@ class ListingLifecycleServiceTest {
 
         when(ticketRepository.findById(1L)).thenReturn(Optional.of(listing));
         when(partnerOrganizerCodeMapper.resolveOrganizerCode("org1")).thenReturn(Optional.of("org1"));
-        when(partnerApiClient.verifyTicket("org1", "uid-1"))
-                .thenReturn(new PartnerTicketVerifyResponse(true, "uid-1", "org1", null));
+        when(partnerApiClient.verifyTicket("org1", "uid-1", null))
+                .thenReturn(new PartnerTicketVerifyResponse(true, "uid-1", "org1", null, null));
         stubTransitions();
 
         TicketLot saved = service.validateListing(1L);
 
         verify(listingStatusHistoryService).transition(listing, TicketStatus.PENDING_VALIDATION, "Проверка начата", null);
         verify(listingStatusHistoryService).transition(listing, TicketStatus.PENDING_RECIPIENT, "Проверка партнёра пройдена", null);
-        verify(partnerApiClient).verifyTicket("org1", "uid-1");
+        verify(partnerApiClient).verifyTicket("org1", "uid-1", null);
         assertEquals(TicketStatus.PENDING_RECIPIENT, listing.getStatus());
         assertEquals(listing, saved);
     }
@@ -94,15 +94,15 @@ class ListingLifecycleServiceTest {
 
         when(ticketRepository.findById(1L)).thenReturn(Optional.of(listing));
         when(partnerOrganizerCodeMapper.resolveOrganizerCode("org1")).thenReturn(Optional.of("org1"));
-        when(partnerApiClient.verifyTicket("org1", "uid-1"))
-                .thenReturn(new PartnerTicketVerifyResponse(false, "uid-1", "org1", "Билет уже использован"));
+        when(partnerApiClient.verifyTicket("org1", "uid-1", null))
+                .thenReturn(new PartnerTicketVerifyResponse(false, "uid-1", "org1", null, "Билет уже использован"));
         stubTransitions();
 
         service.validateListing(1L);
 
         verify(listingStatusHistoryService).transition(listing, TicketStatus.PENDING_VALIDATION, "Проверка начата", null);
         verify(listingStatusHistoryService).transition(listing, TicketStatus.FAILED, "Билет уже использован", null);
-        verify(partnerApiClient).verifyTicket("org1", "uid-1");
+        verify(partnerApiClient).verifyTicket("org1", "uid-1", null);
         assertEquals(TicketStatus.FAILED, listing.getStatus());
     }
 
@@ -117,7 +117,7 @@ class ListingLifecycleServiceTest {
         service.validateListing(1L);
 
         verify(listingStatusHistoryService).transition(listing, TicketStatus.FAILED, "Проверка партнёра не пройдена: организатор не поддерживается", null);
-        verify(partnerApiClient, times(0)).verifyTicket(any(), any());
+        verify(partnerApiClient, times(0)).verifyTicket(any(), any(), any());
         assertEquals(TicketStatus.FAILED, listing.getStatus());
     }
 
@@ -136,7 +136,7 @@ class ListingLifecycleServiceTest {
                 "Проверка не пройдена: дата мероприятия уже прошла",
                 null
         );
-        verify(partnerApiClient, never()).verifyTicket(any(), any());
+        verify(partnerApiClient, never()).verifyTicket(any(), any(), any());
         assertEquals(TicketStatus.FAILED, listing.getStatus());
     }
 
@@ -146,7 +146,7 @@ class ListingLifecycleServiceTest {
 
         when(ticketRepository.findById(1L)).thenReturn(Optional.of(listing));
         when(partnerOrganizerCodeMapper.resolveOrganizerCode("org1")).thenReturn(Optional.of("org1"));
-        when(partnerApiClient.verifyTicket("org1", "uid-1"))
+        when(partnerApiClient.verifyTicket("org1", "uid-1", null))
                 .thenThrow(new PartnerIntegrationException("ошибка"));
         stubTransitions();
 
