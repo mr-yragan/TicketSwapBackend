@@ -5,10 +5,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import ru.ticketswap.common.ConflictException;
+import ru.ticketswap.common.ForbiddenException;
 import ru.ticketswap.common.NotFoundException;
 import ru.ticketswap.event.dto.OrganizerEventRequest;
 import ru.ticketswap.event.dto.VenueRequest;
 import ru.ticketswap.organizer.Organizer;
+import ru.ticketswap.organizer.OrganizerVerificationMode;
 import ru.ticketswap.ticket.TicketRepository;
 import ru.ticketswap.venue.Venue;
 import ru.ticketswap.venue.VenueRepository;
@@ -39,8 +41,7 @@ class OrganizerEventServiceTest {
     @Test
     void createEventReusesVenueAndCalculatesDateInVenueTimezone() {
         OrganizerEventService service = createService();
-        Organizer organizer = new Organizer("Организация", "org3", "org3@example.com");
-        org.springframework.test.util.ReflectionTestUtils.setField(organizer, "id", 3L);
+        Organizer organizer = manualOrganizer();
         Venue venue = new Venue("Арена", "Адрес", "Asia/Almaty");
         OrganizerEventRequest request = request("EVT-1", "2030-01-01T20:30:00Z", "Asia/Almaty");
 
@@ -60,8 +61,7 @@ class OrganizerEventServiceTest {
     @Test
     void createEventRejectsDuplicateEventIdForOrganizer() {
         OrganizerEventService service = createService();
-        Organizer organizer = new Organizer("Организация", "org3", "org3@example.com");
-        org.springframework.test.util.ReflectionTestUtils.setField(organizer, "id", 3L);
+        Organizer organizer = manualOrganizer();
 
         when(eventRepository.existsByOrganizerIdAndEventIdIgnoreCase(3L, "EVT-1")).thenReturn(true);
 
@@ -73,10 +73,43 @@ class OrganizerEventServiceTest {
     }
 
     @Test
+    void createEventRejectsExternalApiOrganizer() {
+        OrganizerEventService service = createService();
+        Organizer organizer = externalOrganizer();
+
+        assertThrows(ForbiddenException.class, () -> service.createEvent(
+                organizer,
+                request("EVT-1", "2030-01-01T20:30:00Z", "Europe/Moscow")
+        ));
+        verify(eventRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void deleteEventRejectsExternalApiOrganizer() {
+        OrganizerEventService service = createService();
+        Organizer organizer = externalOrganizer();
+
+        assertThrows(ForbiddenException.class, () -> service.deleteEvent(organizer, 10L));
+        verify(eventRepository, never()).delete(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void createEventRejectsBannedManualOrganizer() {
+        OrganizerEventService service = createService();
+        Organizer organizer = manualOrganizer();
+        organizer.setBanned(true);
+
+        assertThrows(ForbiddenException.class, () -> service.createEvent(
+                organizer,
+                request("EVT-1", "2030-01-01T20:30:00Z", "Europe/Moscow")
+        ));
+        verify(eventRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void getEventReturns404ForMissingOrForeignEvent() {
         OrganizerEventService service = createService();
-        Organizer organizer = new Organizer("Организация", "org3", "org3@example.com");
-        org.springframework.test.util.ReflectionTestUtils.setField(organizer, "id", 3L);
+        Organizer organizer = manualOrganizer();
 
         when(eventRepository.findByIdAndOrganizerId(10L, 3L)).thenReturn(Optional.empty());
 
@@ -86,8 +119,7 @@ class OrganizerEventServiceTest {
     @Test
     void deleteEventRejectsLinkedTickets() {
         OrganizerEventService service = createService();
-        Organizer organizer = new Organizer("Организация", "org3", "org3@example.com");
-        org.springframework.test.util.ReflectionTestUtils.setField(organizer, "id", 3L);
+        Organizer organizer = manualOrganizer();
         Event event = new Event(
                 "EVT-1",
                 "Концерт",
@@ -103,6 +135,18 @@ class OrganizerEventServiceTest {
 
         assertThrows(ConflictException.class, () -> service.deleteEvent(organizer, 10L));
         verify(eventRepository, never()).delete(event);
+    }
+
+    private Organizer manualOrganizer() {
+        Organizer organizer = new Organizer("Организация", "", "org3@example.com", OrganizerVerificationMode.MANUAL);
+        org.springframework.test.util.ReflectionTestUtils.setField(organizer, "id", 3L);
+        return organizer;
+    }
+
+    private Organizer externalOrganizer() {
+        Organizer organizer = new Organizer("Организация", "org3", "org3@example.com", OrganizerVerificationMode.EXTERNAL_API);
+        org.springframework.test.util.ReflectionTestUtils.setField(organizer, "id", 3L);
+        return organizer;
     }
 
     private OrganizerEventRequest request(String eventId, String startsAt, String timezone) {

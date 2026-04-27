@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.ticketswap.common.BusinessRuleException;
 import ru.ticketswap.common.ConflictException;
+import ru.ticketswap.common.ForbiddenException;
 import ru.ticketswap.common.NotFoundException;
 import ru.ticketswap.event.dto.OrganizerEventRequest;
 import ru.ticketswap.organizer.Organizer;
@@ -35,6 +36,8 @@ public class OrganizerEventService {
 
     @Transactional
     public Event createEvent(Organizer organizer, OrganizerEventRequest request) {
+        requireManualOrganizerMutation(organizer);
+
         String eventId = request.eventId().trim();
         if (eventRepository.existsByOrganizerIdAndEventIdIgnoreCase(organizer.getId(), eventId)) {
             throw new ConflictException("Мероприятие с таким ID уже существует у этого организатора");
@@ -64,6 +67,8 @@ public class OrganizerEventService {
 
     @Transactional
     public Event updateEvent(Organizer organizer, Long id, OrganizerEventRequest request) {
+        requireManualOrganizerMutation(organizer);
+
         Event event = getEvent(organizer, id);
         String eventId = request.eventId().trim();
 
@@ -83,12 +88,26 @@ public class OrganizerEventService {
 
     @Transactional
     public void deleteEvent(Organizer organizer, Long id) {
+        requireManualOrganizerMutation(organizer);
+
         Event event = getEvent(organizer, id);
         if (ticketRepository.existsByEvent_Id(event.getId())) {
             throw new ConflictException("Мероприятие нельзя удалить, потому что к нему привязаны билеты");
         }
 
         eventRepository.delete(event);
+    }
+
+    private void requireManualOrganizerMutation(Organizer organizer) {
+        if (organizer == null) {
+            throw new ForbiddenException("Профиль организатора не найден");
+        }
+        if (organizer.isBanned()) {
+            throw new ForbiddenException("Организатор заблокирован");
+        }
+        if (!organizer.isManual()) {
+            throw new ForbiddenException("Добавлять, редактировать и удалять мероприятия могут только ручные организаторы");
+        }
     }
 
     private Venue findOrCreateVenue(OrganizerEventRequest request) {
