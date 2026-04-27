@@ -5,6 +5,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
@@ -28,20 +32,23 @@ import ru.ticketswap.ticket.dto.ListingDetailsResponse;
 import ru.ticketswap.ticket.dto.ListingStatusHistoryResponse;
 import ru.ticketswap.ticket.dto.ListingViewResponse;
 import ru.ticketswap.ticket.dto.TicketFileDownloadUrlResponse;
+import ru.ticketswap.ticket.dto.TicketLotPageResponse;
 import ru.ticketswap.ticket.dto.TicketFilesResponse;
 import ru.ticketswap.ticket.dto.TicketLotResponse;
 import ru.ticketswap.user.User;
 import ru.ticketswap.user.UserRepository;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 @RestController
 @RequestMapping("/api/tickets")
@@ -114,19 +121,82 @@ public class TicketController {
     }
 
     @GetMapping
-    public ResponseEntity<List<TicketLotResponse>> listTickets() {
-        LocalDateTime now = LocalDateTime.now();
-        Set<Long> heldIds = new HashSet<>(listingHoldRepository.findActiveListingIds(Instant.now()));
+    public ResponseEntity<?> listTickets(
+            @RequestParam(value = "query", required = false) String query,
+            @RequestParam(value = "q", required = false) String q,
+            @RequestParam(value = "organizerId", required = false) Long organizerId,
+            @RequestParam(value = "eventDbId", required = false) Long eventDbId,
+            @RequestParam(value = "selectedEventId", required = false) Long selectedEventId,
+            @RequestParam(value = "eventId", required = false) String eventId,
+            @RequestParam(value = "city", required = false) String city,
+            @RequestParam(value = "venueCity", required = false) String venueCity,
+            @RequestParam(value = "venue", required = false) String venue,
+            @RequestParam(value = "venueName", required = false) String venueName,
+            @RequestParam(value = "dateFrom", required = false) String dateFrom,
+            @RequestParam(value = "dateTo", required = false) String dateTo,
+            @RequestParam(value = "priceMin", required = false) BigDecimal priceMin,
+            @RequestParam(value = "priceMax", required = false) BigDecimal priceMax,
+            @RequestParam(value = "sort", defaultValue = "createdDesc") String sort,
+            @RequestParam(value = "limit", required = false) Integer limit,
+            @RequestParam(value = "page", required = false) Integer page,
+            @RequestParam(value = "size", required = false) Integer size,
+            @RequestParam(value = "paged", required = false) Boolean paged
+    ) {
+        PublicListingSearch search = new PublicListingSearch(
+                firstNonBlank(query, q),
+                organizerId,
+                eventDbId != null ? eventDbId : selectedEventId,
+                eventId,
+                firstNonBlank(city, venueCity),
+                firstNonBlank(venue, venueName),
+                parseDateBoundary(dateFrom, false, "dateFrom"),
+                parseDateBoundary(dateTo, true, "dateTo"),
+                priceMin,
+                priceMax,
+                resolveListingSort(sort),
+                normalizeLimit(limit),
+                normalizePage(page),
+                normalizePageSize(size, limit),
+                shouldReturnPagedResponse(page, size, paged)
+        );
+        validatePublicListingSearch(search);
 
-        List<TicketLotResponse> response = ticketRepository.findAll().stream()
-                .filter(t -> t.getStatus() == TicketStatus.PENDING_RECIPIENT)
-                .filter(t -> t.getEventDate() != null && t.getEventDate().isAfter(now))
-                .filter(t -> !heldIds.contains(t.getId()))
-                .sorted(Comparator.comparing(TicketLot::getCreatedAt).reversed())
+        String normalizedQuery = normalizeSearchText(search.query());
+        String normalizedEventId = normalizeExactText(search.eventId());
+        String normalizedCity = normalizeSearchText(search.city());
+        String normalizedVenue = normalizeSearchText(search.venue());
+
+        Pageable pageable = PageRequest.of(search.page(), search.size(), search.sort());
+        Page<TicketLot> pageResult = ticketRepository.searchPublicListings(
+                TicketStatus.PENDING_RECIPIENT,
+                LocalDateTime.now(),
+                Instant.now(),
+                toSqlTextParam(normalizedQuery),
+                normalizedQuery == null,
+                search.organizerId(),
+                search.eventDbId(),
+                toSqlTextParam(normalizedEventId),
+                normalizedEventId == null,
+                toSqlTextParam(normalizedCity),
+                normalizedCity == null,
+                toSqlTextParam(normalizedVenue),
+                normalizedVenue == null,
+                search.dateFrom(),
+                search.dateTo(),
+                search.priceMin(),
+                search.priceMax(),
+                pageable
+        );
+
+        List<TicketLotResponse> content = pageResult.getContent().stream()
                 .map(this::toTicketLotResponse)
                 .toList();
 
-        return ResponseEntity.ok(response);
+        if (search.paged()) {
+            return ResponseEntity.ok(TicketLotPageResponse.from(pageResult, content, sort));
+        }
+
+        return ResponseEntity.ok(content);
     }
 
     @GetMapping("/{id}")
@@ -786,6 +856,142 @@ public class TicketController {
         return status == TicketStatus.PENDING_RECIPIENT
                 || status == TicketStatus.PROCESSING
                 || status == TicketStatus.COMPLETED;
+    }
+
+    private String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) {
+            return first;
+        }
+        if (second != null && !second.isBlank()) {
+            return second;
+        }
+        return null;
+    }
+
+    private String normalizeSearchText(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim().toLowerCase();
+    }
+
+    private String normalizeExactText(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim().toLowerCase();
+    }
+
+    private String toSqlTextParam(String value) {
+        return value == null ? "" : value;
+    }
+
+    private Integer normalizeLimit(Integer limit) {
+        if (limit == null) {
+            return 100;
+        }
+        if (limit < 1) {
+            throw new BusinessRuleException("limit must be positive");
+        }
+        return Math.min(limit, 100);
+    }
+
+    private Integer normalizePage(Integer page) {
+        if (page == null) {
+            return 0;
+        }
+        if (page < 0) {
+            throw new BusinessRuleException("page cannot be negative");
+        }
+        return page;
+    }
+
+    private Integer normalizePageSize(Integer size, Integer limit) {
+        Integer effectiveSize = size != null ? size : normalizeLimit(limit);
+        if (effectiveSize < 1) {
+            throw new BusinessRuleException("size must be positive");
+        }
+        return Math.min(effectiveSize, 100);
+    }
+
+    private boolean shouldReturnPagedResponse(Integer page, Integer size, Boolean paged) {
+        return Boolean.TRUE.equals(paged) || page != null || size != null;
+    }
+
+    private LocalDateTime parseDateBoundary(String value, boolean endOfDay, String fieldName) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        String trimmed = value.trim();
+        try {
+            return LocalDateTime.parse(trimmed);
+        } catch (DateTimeParseException ignored) {
+            // Try other accepted public-filter formats below.
+        }
+
+        try {
+            return OffsetDateTime.parse(trimmed).toLocalDateTime();
+        } catch (DateTimeParseException ignored) {
+            // Try date-only format below.
+        }
+
+        try {
+            LocalDate date = LocalDate.parse(trimmed);
+            if (endOfDay) {
+                return LocalDateTime.of(date, LocalTime.MAX);
+            }
+            return date.atStartOfDay();
+        } catch (DateTimeParseException ex) {
+            throw new BusinessRuleException(fieldName + " должен быть в формате ISO: yyyy-MM-dd или yyyy-MM-ddTHH:mm:ss");
+        }
+    }
+
+    private Sort resolveListingSort(String sort) {
+        String normalized = sort == null || sort.isBlank() ? "createdDesc" : sort.trim();
+        return switch (normalized) {
+            case "createdDesc" -> Sort.by(Sort.Direction.DESC, "createdAt");
+            case "createdAsc" -> Sort.by(Sort.Direction.ASC, "createdAt");
+            case "eventDateAsc" -> Sort.by(Sort.Direction.ASC, "eventDate").and(Sort.by(Sort.Direction.ASC, "createdAt"));
+            case "eventDateDesc" -> Sort.by(Sort.Direction.DESC, "eventDate").and(Sort.by(Sort.Direction.DESC, "createdAt"));
+            case "priceAsc" -> Sort.by(Sort.Direction.ASC, "resalePrice").and(Sort.by(Sort.Direction.DESC, "createdAt"));
+            case "priceDesc" -> Sort.by(Sort.Direction.DESC, "resalePrice").and(Sort.by(Sort.Direction.DESC, "createdAt"));
+            default -> throw new BusinessRuleException("Неподдерживаемая сортировка: " + normalized);
+        };
+    }
+
+    private void validatePublicListingSearch(PublicListingSearch search) {
+        if (search.priceMin() != null && search.priceMin().compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessRuleException("priceMin не может быть отрицательным");
+        }
+        if (search.priceMax() != null && search.priceMax().compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessRuleException("priceMax не может быть отрицательным");
+        }
+        if (search.priceMin() != null && search.priceMax() != null && search.priceMin().compareTo(search.priceMax()) > 0) {
+            throw new BusinessRuleException("priceMin не может быть больше priceMax");
+        }
+        if (search.dateFrom() != null && search.dateTo() != null && search.dateFrom().isAfter(search.dateTo())) {
+            throw new BusinessRuleException("dateFrom не может быть позже dateTo");
+        }
+    }
+
+    private record PublicListingSearch(
+            String query,
+            Long organizerId,
+            Long eventDbId,
+            String eventId,
+            String city,
+            String venue,
+            LocalDateTime dateFrom,
+            LocalDateTime dateTo,
+            BigDecimal priceMin,
+            BigDecimal priceMax,
+            Sort sort,
+            Integer limit,
+            Integer page,
+            Integer size,
+            boolean paged
+    ) {
     }
 
     private record ResolvedListingInput(
