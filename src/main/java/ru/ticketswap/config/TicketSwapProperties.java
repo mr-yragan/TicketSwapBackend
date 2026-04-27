@@ -16,6 +16,7 @@ public class TicketSwapProperties {
     private final Storage storage = new Storage();
     private final Mail mail = new Mail();
     private final PartnerApi partnerApi = new PartnerApi();
+    private final Search search = new Search();
 
     public Security getSecurity() {
         return security;
@@ -35,6 +36,10 @@ public class TicketSwapProperties {
 
     public PartnerApi getPartnerApi() {
         return partnerApi;
+    }
+
+    public Search getSearch() {
+        return search;
     }
 
     public static class Security {
@@ -306,6 +311,71 @@ public class TicketSwapProperties {
 
         public void setReadTimeoutMs(long readTimeoutMs) {
             this.readTimeoutMs = readTimeoutMs;
+        }
+    }
+
+
+    public static class Search {
+        private final Elasticsearch elasticsearch = new Elasticsearch();
+
+        public Elasticsearch getElasticsearch() {
+            return elasticsearch;
+        }
+
+        public static class Elasticsearch {
+            private boolean enabled = false;
+
+            @NotBlank
+            private String baseUrl = "http://localhost:9200";
+
+            @NotBlank
+            private String indexName = "ticketswap-events";
+
+            @Min(1)
+            private long connectTimeoutMs = 1_000;
+
+            @Min(1)
+            private long readTimeoutMs = 2_000;
+
+            public boolean isEnabled() {
+                return enabled;
+            }
+
+            public void setEnabled(boolean enabled) {
+                this.enabled = enabled;
+            }
+
+            public String getBaseUrl() {
+                return baseUrl;
+            }
+
+            public void setBaseUrl(String baseUrl) {
+                this.baseUrl = baseUrl;
+            }
+
+            public String getIndexName() {
+                return indexName;
+            }
+
+            public void setIndexName(String indexName) {
+                this.indexName = indexName;
+            }
+
+            public long getConnectTimeoutMs() {
+                return connectTimeoutMs;
+            }
+
+            public void setConnectTimeoutMs(long connectTimeoutMs) {
+                this.connectTimeoutMs = connectTimeoutMs;
+            }
+
+            public long getReadTimeoutMs() {
+                return readTimeoutMs;
+            }
+
+            public void setReadTimeoutMs(long readTimeoutMs) {
+                this.readTimeoutMs = readTimeoutMs;
+            }
         }
     }
 

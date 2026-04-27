@@ -66,6 +66,21 @@ public class ApplicationConfig {
     }
 
     @Bean
+    @Qualifier("elasticsearchRestClient")
+    public RestClient elasticsearchRestClient() {
+        TicketSwapProperties.Search.Elasticsearch properties = ticketSwapProperties.getSearch().getElasticsearch();
+
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Math.toIntExact(properties.getConnectTimeoutMs()));
+        requestFactory.setReadTimeout(Math.toIntExact(properties.getReadTimeoutMs()));
+
+        return RestClient.builder()
+                .baseUrl(properties.getBaseUrl())
+                .requestFactory(requestFactory)
+                .build();
+    }
+
+    @Bean
     public Clock clock() {
         return Clock.systemUTC();
     }

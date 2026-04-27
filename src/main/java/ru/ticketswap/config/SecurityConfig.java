@@ -52,6 +52,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/mock/partners/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/organizers", "/api/organizers/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/events/search").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/organizer/**").hasRole("ORGANIZER")
                         .requestMatchers(HttpMethod.GET, "/api/tickets/my").authenticated()

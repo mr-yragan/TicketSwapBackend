@@ -68,3 +68,10 @@ ticketswap:
     base-url: ${TICKETSWAP_PARTNER_API_BASE_URL:http://localhost:${server.port}}
     connect-timeout-ms: ${TICKETSWAP_PARTNER_API_CONNECT_TIMEOUT_MS:1000}
     read-timeout-ms: ${TICKETSWAP_PARTNER_API_READ_TIMEOUT_MS:2000}
+  search:
+    elasticsearch:
+      enabled: ${TICKETSWAP_SEARCH_ELASTICSEARCH_ENABLED:false}
+      base-url: ${TICKETSWAP_SEARCH_ELASTICSEARCH_BASE_URL:http://localhost:9200}
+      index-name: ${TICKETSWAP_SEARCH_ELASTICSEARCH_INDEX_NAME:ticketswap-events}
+      connect-timeout-ms: ${TICKETSWAP_SEARCH_ELASTICSEARCH_CONNECT_TIMEOUT_MS:1000}
+      read-timeout-ms: ${TICKETSWAP_SEARCH_ELASTICSEARCH_READ_TIMEOUT_MS:2000}

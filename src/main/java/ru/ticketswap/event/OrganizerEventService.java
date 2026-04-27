@@ -7,6 +7,7 @@ import ru.ticketswap.common.ConflictException;
 import ru.ticketswap.common.ForbiddenException;
 import ru.ticketswap.common.NotFoundException;
 import ru.ticketswap.event.dto.OrganizerEventRequest;
+import ru.ticketswap.event.search.EventSearchService;
 import ru.ticketswap.organizer.Organizer;
 import ru.ticketswap.ticket.TicketRepository;
 import ru.ticketswap.venue.Venue;
@@ -23,15 +24,18 @@ public class OrganizerEventService {
     private final EventRepository eventRepository;
     private final VenueRepository venueRepository;
     private final TicketRepository ticketRepository;
+    private final EventSearchService eventSearchService;
 
     public OrganizerEventService(
             EventRepository eventRepository,
             VenueRepository venueRepository,
-            TicketRepository ticketRepository
+            TicketRepository ticketRepository,
+            EventSearchService eventSearchService
     ) {
         this.eventRepository = eventRepository;
         this.venueRepository = venueRepository;
         this.ticketRepository = ticketRepository;
+        this.eventSearchService = eventSearchService;
     }
 
     @Transactional
@@ -53,7 +57,9 @@ public class OrganizerEventService {
                 calculateEventDate(request, venue)
         );
 
-        return eventRepository.save(event);
+        Event saved = eventRepository.save(event);
+        eventSearchService.indexEvent(saved);
+        return saved;
     }
 
     public List<Event> listEvents(Organizer organizer) {
@@ -83,7 +89,9 @@ public class OrganizerEventService {
         event.setVenue(venue);
         event.setDate(calculateEventDate(request, venue));
 
-        return eventRepository.save(event);
+        Event saved = eventRepository.save(event);
+        eventSearchService.indexEvent(saved);
+        return saved;
     }
 
     @Transactional
@@ -96,6 +104,7 @@ public class OrganizerEventService {
         }
 
         eventRepository.delete(event);
+        eventSearchService.deleteEvent(event.getId());
     }
 
     private void requireManualOrganizerMutation(Organizer organizer) {

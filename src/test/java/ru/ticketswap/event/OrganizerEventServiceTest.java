@@ -9,6 +9,7 @@ import ru.ticketswap.common.ForbiddenException;
 import ru.ticketswap.common.NotFoundException;
 import ru.ticketswap.event.dto.OrganizerEventRequest;
 import ru.ticketswap.event.dto.VenueRequest;
+import ru.ticketswap.event.search.EventSearchService;
 import ru.ticketswap.organizer.Organizer;
 import ru.ticketswap.organizer.OrganizerVerificationMode;
 import ru.ticketswap.ticket.TicketRepository;
@@ -37,6 +38,9 @@ class OrganizerEventServiceTest {
 
     @Mock
     private TicketRepository ticketRepository;
+
+    @Mock
+    private EventSearchService eventSearchService;
 
     @Test
     void createEventReusesVenueAndCalculatesDateInVenueTimezone() {
@@ -159,6 +163,6 @@ class OrganizerEventServiceTest {
     }
 
     private OrganizerEventService createService() {
-        return new OrganizerEventService(eventRepository, venueRepository, ticketRepository);
+        return new OrganizerEventService(eventRepository, venueRepository, ticketRepository, eventSearchService);
     }
 }

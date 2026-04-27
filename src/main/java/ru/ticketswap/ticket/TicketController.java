@@ -35,6 +35,7 @@ import ru.ticketswap.user.UserRepository;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -221,10 +222,10 @@ public class TicketController {
 
         ensureSellerCanModifyListing(ticket, seller);
 
-        VenueParts newVenueParts = parseVenueParts(request.venue());
-        boolean requiresRevalidation = requiresRevalidation(ticket, request, newVenueParts);
+        ResolvedListingInput resolved = resolveListingInput(request);
+        boolean requiresRevalidation = requiresRevalidation(ticket, request, resolved);
 
-        applyEditableFields(ticket, request, newVenueParts);
+        applyEditableFields(ticket, request, resolved);
 
         TicketLot saved;
         if (requiresRevalidation) {
@@ -416,26 +417,72 @@ public class TicketController {
     }
 
     private TicketLot createListing(CreateTicketRequest request, User seller) {
-        VenueParts venueParts = parseVenueParts(request.venue());
-        Organizer organizer = resolveOrganizer(request);
-        Event linkedEvent = resolveLinkedEvent(request, organizer);
+        ResolvedListingInput resolved = resolveListingInput(request);
 
         TicketLot ticket = new TicketLot(
                 request.uid(),
-                request.eventName(),
-                request.eventDate(),
-                venueParts.venueName(),
-                venueParts.venueCity(),
+                resolved.eventName(),
+                resolved.eventDate(),
+                resolved.venueParts().venueName(),
+                resolved.venueParts().venueCity(),
                 request.price(),
                 request.additionalInfo(),
-                organizer.getName(),
+                resolved.organizer().getName(),
                 request.sellerComment(),
                 seller
         );
-        ticket.setOrganizer(organizer);
-        ticket.setEvent(linkedEvent);
+        ticket.setOrganizer(resolved.organizer());
+        ticket.setEvent(resolved.event());
 
         return listingStatusHistoryService.createListingWithInitialStatus(ticket, "Объявление создано", seller);
+    }
+
+    private ResolvedListingInput resolveListingInput(CreateTicketRequest request) {
+        if (request.selectedEventId() != null) {
+            Event event = eventRepository.findById(request.selectedEventId())
+                    .orElseThrow(() -> new BusinessRuleException("Выбранное мероприятие не найдено"));
+            Organizer organizer = event.getOrganizer();
+            ensureOrganizerCanAcceptListings(organizer);
+            ensureEventIsUpcoming(event);
+            VenueParts venueParts = new VenueParts(
+                    event.getVenue().getName(),
+                    event.getVenue().getAddress()
+            );
+            return new ResolvedListingInput(
+                    event.getName(),
+                    event.getStartsAt().atZone(ZoneId.of(event.getVenue().getTimezone())).toLocalDateTime(),
+                    venueParts,
+                    organizer,
+                    event
+            );
+        }
+
+        validateManualEventFields(request);
+        VenueParts venueParts = parseVenueParts(request.venue());
+        Organizer organizer = resolveOrganizer(request);
+        Event linkedEvent = resolveLinkedEvent(request, organizer);
+        return new ResolvedListingInput(
+                request.eventName().trim(),
+                request.eventDate(),
+                venueParts,
+                organizer,
+                linkedEvent
+        );
+    }
+
+    private void validateManualEventFields(CreateTicketRequest request) {
+        if (request.eventName() == null || request.eventName().isBlank()) {
+            throw new BusinessRuleException("Название мероприятия обязательно, если мероприятие не выбрано из поиска");
+        }
+        if (request.eventDate() == null) {
+            throw new BusinessRuleException("Дата мероприятия обязательна, если мероприятие не выбрано из поиска");
+        }
+        if (!request.eventDate().isAfter(LocalDateTime.now())) {
+            throw new BusinessRuleException("Дата мероприятия должна быть в будущем");
+        }
+        if (request.venue() == null || request.venue().isBlank()) {
+            throw new BusinessRuleException("Площадка обязательна, если мероприятие не выбрано из поиска");
+        }
     }
 
     private Organizer resolveOrganizer(CreateTicketRequest request) {
@@ -469,8 +516,17 @@ public class TicketController {
     }
 
     private void ensureOrganizerCanAcceptListings(Organizer organizer) {
+        if (organizer == null) {
+            throw new BusinessRuleException("Нужно выбрать зарегистрированного организатора");
+        }
         if (organizer.isBanned()) {
             throw new BusinessRuleException("Организатор заблокирован и не может принимать новые билеты");
+        }
+    }
+
+    private void ensureEventIsUpcoming(Event event) {
+        if (event.getStartsAt() == null || !event.getStartsAt().isAfter(Instant.now())) {
+            throw new BusinessRuleException("Выбранное мероприятие уже прошло");
         }
     }
 
@@ -479,12 +535,14 @@ public class TicketController {
             return null;
         }
 
-        return eventRepository
+        Event event = eventRepository
                 .findByOrganizerIdAndEventIdIgnoreCase(
                         organizer.getId(),
                         request.eventId().trim()
                 )
                 .orElseThrow(() -> new BusinessRuleException("ID мероприятия указан, но мероприятие не найдено у выбранного организатора"));
+        ensureEventIsUpcoming(event);
+        return event;
     }
 
     private TicketLot loadTicket(Long id) {
@@ -592,47 +650,62 @@ public class TicketController {
             return true;
         }
 
-        Organizer newOrganizer = resolveOrganizer(request);
-
-        if (organizerRepository == null) {
-            return !safeEquals(ticket.getUid(), request.uid())
-                    || !safeEquals(ticket.getEventName(), request.eventName())
-                    || !safeEquals(ticket.getEventDate(), request.eventDate())
-                    || !safeEquals(ticket.getVenueName(), newVenueParts.venueName())
-                    || !safeEquals(ticket.getVenueCity(), newVenueParts.venueCity())
-                    || !safeEquals(
-                    partnerOrganizerCodeMapper.normalizeOrganizerName(ticket.getOrganizerName()),
-                    partnerOrganizerCodeMapper.normalizeOrganizerName(request.organizerName())
-            )
-                    || !safeEquals(
-                    ticket.getEvent() == null ? null : ticket.getEvent().getEventId(),
-                    request.eventId()
-            );
-        }
-
         return !safeEquals(ticket.getUid(), request.uid())
                 || !safeEquals(ticket.getEventName(), request.eventName())
                 || !safeEquals(ticket.getEventDate(), request.eventDate())
                 || !safeEquals(ticket.getVenueName(), newVenueParts.venueName())
                 || !safeEquals(ticket.getVenueCity(), newVenueParts.venueCity())
-                || !safeEquals(ticket.getOrganizer() == null ? null : ticket.getOrganizer().getId(), newOrganizer.getId())
+                || !safeEquals(
+                partnerOrganizerCodeMapper.normalizeOrganizerName(ticket.getOrganizerName()),
+                partnerOrganizerCodeMapper.normalizeOrganizerName(request.organizerName())
+        )
                 || !safeEquals(
                 ticket.getEvent() == null ? null : ticket.getEvent().getEventId(),
                 request.eventId()
         );
     }
 
-    private void applyEditableFields(TicketLot ticket, CreateTicketRequest request, VenueParts venueParts) {
-        Organizer organizer = resolveOrganizer(request);
+    private boolean requiresRevalidation(TicketLot ticket, CreateTicketRequest request, ResolvedListingInput resolved) {
+        if (ticket.getStatus() == TicketStatus.FAILED
+                || ticket.getStatus() == TicketStatus.CREATED
+                || ticket.getStatus() == TicketStatus.PENDING_VALIDATION) {
+            return true;
+        }
+
+        if (organizerRepository == null) {
+            return !safeEquals(ticket.getUid(), request.uid())
+                    || !safeEquals(ticket.getEventName(), resolved.eventName())
+                    || !safeEquals(ticket.getEventDate(), resolved.eventDate())
+                    || !safeEquals(ticket.getVenueName(), resolved.venueParts().venueName())
+                    || !safeEquals(ticket.getVenueCity(), resolved.venueParts().venueCity())
+                    || !safeEquals(
+                    ticket.getEvent() == null ? null : ticket.getEvent().getEventId(),
+                    resolved.event() == null ? null : resolved.event().getEventId()
+            );
+        }
+
+        return !safeEquals(ticket.getUid(), request.uid())
+                || !safeEquals(ticket.getEventName(), resolved.eventName())
+                || !safeEquals(ticket.getEventDate(), resolved.eventDate())
+                || !safeEquals(ticket.getVenueName(), resolved.venueParts().venueName())
+                || !safeEquals(ticket.getVenueCity(), resolved.venueParts().venueCity())
+                || !safeEquals(ticket.getOrganizer() == null ? null : ticket.getOrganizer().getId(), resolved.organizer().getId())
+                || !safeEquals(
+                ticket.getEvent() == null ? null : ticket.getEvent().getId(),
+                resolved.event() == null ? null : resolved.event().getId()
+        );
+    }
+
+    private void applyEditableFields(TicketLot ticket, CreateTicketRequest request, ResolvedListingInput resolved) {
         ticket.setUid(request.uid());
-        ticket.setEventName(request.eventName());
-        ticket.setEventDate(request.eventDate());
-        ticket.setVenueName(venueParts.venueName());
-        ticket.setVenueCity(venueParts.venueCity());
+        ticket.setEventName(resolved.eventName());
+        ticket.setEventDate(resolved.eventDate());
+        ticket.setVenueName(resolved.venueParts().venueName());
+        ticket.setVenueCity(resolved.venueParts().venueCity());
         ticket.setAdditionalInfo(request.additionalInfo());
-        ticket.setOrganizer(organizer);
-        ticket.setOrganizerName(organizer.getName());
-        ticket.setEvent(resolveLinkedEvent(request, organizer));
+        ticket.setOrganizer(resolved.organizer());
+        ticket.setOrganizerName(resolved.organizer().getName());
+        ticket.setEvent(resolved.event());
         ticket.setSellerComment(request.sellerComment());
         ticket.setOriginalPrice(request.price());
         ticket.setResalePrice(request.price());
@@ -713,6 +786,15 @@ public class TicketController {
         return status == TicketStatus.PENDING_RECIPIENT
                 || status == TicketStatus.PROCESSING
                 || status == TicketStatus.COMPLETED;
+    }
+
+    private record ResolvedListingInput(
+            String eventName,
+            LocalDateTime eventDate,
+            VenueParts venueParts,
+            Organizer organizer,
+            Event event
+    ) {
     }
 
     private record VenueParts(String venueName, String venueCity) {

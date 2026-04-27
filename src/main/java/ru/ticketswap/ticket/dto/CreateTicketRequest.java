@@ -1,7 +1,6 @@
 package ru.ticketswap.ticket.dto;
 
 import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -14,15 +13,11 @@ public record CreateTicketRequest(
         @Size(max = 255, message = "UID должен быть не длиннее 255 символов")
         String uid,
 
-        @NotBlank(message = "Название мероприятия обязательно")
         @Size(max = 255, message = "Название мероприятия должно быть не длиннее 255 символов")
         String eventName,
 
-        @NotNull(message = "Дата мероприятия обязательна")
-        @Future(message = "Дата мероприятия должна быть в будущем")
         LocalDateTime eventDate,
 
-        @NotBlank(message = "Площадка обязательна")
         @Size(max = 255, message = "Площадка должна быть не длиннее 255 символов")
         String venue,
 
@@ -42,8 +37,25 @@ public record CreateTicketRequest(
         String eventId,
 
         @Size(max = 2000, message = "Комментарий продавца должен быть не длиннее 2000 символов")
-        String sellerComment
+        String sellerComment,
+
+        Long selectedEventId
 ) {
+
+    public CreateTicketRequest(
+            String uid,
+            String eventName,
+            LocalDateTime eventDate,
+            String venue,
+            BigDecimal price,
+            String additionalInfo,
+            Long organizerId,
+            String organizerName,
+            String eventId,
+            String sellerComment
+    ) {
+        this(uid, eventName, eventDate, venue, price, additionalInfo, organizerId, organizerName, eventId, sellerComment, null);
+    }
 
     public CreateTicketRequest(
             String uid,
@@ -56,7 +68,7 @@ public record CreateTicketRequest(
             String eventId,
             String sellerComment
     ) {
-        this(uid, eventName, eventDate, venue, price, additionalInfo, null, organizerName, eventId, sellerComment);
+        this(uid, eventName, eventDate, venue, price, additionalInfo, null, organizerName, eventId, sellerComment, null);
     }
 
     public CreateTicketRequest(
@@ -69,6 +81,6 @@ public record CreateTicketRequest(
             String organizerName,
             String sellerComment
     ) {
-        this(uid, eventName, eventDate, venue, price, additionalInfo, null, organizerName, null, sellerComment);
+        this(uid, eventName, eventDate, venue, price, additionalInfo, null, organizerName, null, sellerComment, null);
     }
 }
