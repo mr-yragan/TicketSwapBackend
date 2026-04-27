@@ -28,7 +28,7 @@ public class MockPartnerInternalAuthFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {
-        return !request.getRequestURI().startsWith("/api/mock/partners/");
+        return !properties.getMockPartner().isEnabled() || !request.getRequestURI().startsWith("/api/mock/partners/");
     }
 
     @Override

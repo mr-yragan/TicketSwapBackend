@@ -15,6 +15,8 @@ import ru.ticketswap.me.dto.MeProfileResponse;
 import ru.ticketswap.me.dto.TwoFactorStatusResponse;
 import ru.ticketswap.me.dto.TwoFactorToggleRequest;
 import ru.ticketswap.me.dto.UpdateMeRequest;
+import ru.ticketswap.purchase.PurchaseOrderRepository;
+import ru.ticketswap.purchase.dto.PurchaseOrderResponse;
 import ru.ticketswap.ticket.TicketLot;
 import ru.ticketswap.ticket.TicketRepository;
 import ru.ticketswap.ticket.TicketStatus;
@@ -38,6 +40,7 @@ public class MeController {
     private final UserIdentityService userIdentityService;
     private final TwoFactorService twoFactorService;
     private final PasswordEncoder passwordEncoder;
+    private final PurchaseOrderRepository purchaseOrderRepository;
 
     public MeController(
             UserRepository userRepository,
@@ -45,7 +48,8 @@ public class MeController {
             ListingHoldRepository listingHoldRepository,
             UserIdentityService userIdentityService,
             TwoFactorService twoFactorService,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            PurchaseOrderRepository purchaseOrderRepository
     ) {
         this.userRepository = userRepository;
         this.ticketRepository = ticketRepository;
@@ -53,6 +57,7 @@ public class MeController {
         this.userIdentityService = userIdentityService;
         this.twoFactorService = twoFactorService;
         this.passwordEncoder = passwordEncoder;
+        this.purchaseOrderRepository = purchaseOrderRepository;
     }
 
     @GetMapping
@@ -169,6 +174,18 @@ public class MeController {
 
         return ResponseEntity.ok(res);
     }
+
+
+
+    @GetMapping("/orders")
+    public ResponseEntity<List<PurchaseOrderResponse>> myOrders(@AuthenticationPrincipal UserDetails principal) {
+        User user = requireUser(principal);
+        List<PurchaseOrderResponse> response = purchaseOrderRepository.findAllByBuyerIdOrderByCreatedAtDesc(user.getId()).stream()
+                .map(order -> PurchaseOrderResponse.fromEntity(order, false))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(response);
+    }
+
 
     private User requireUser(UserDetails principal) {
         if (principal == null || principal.getUsername() == null) {

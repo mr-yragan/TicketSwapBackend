@@ -8,6 +8,10 @@ import ru.ticketswap.common.NotFoundException;
 import ru.ticketswap.hold.ListingHoldRepository;
 import ru.ticketswap.organizer.Organizer;
 import ru.ticketswap.organizer.OrganizerVerificationMode;
+import ru.ticketswap.purchase.PaymentStatus;
+import ru.ticketswap.purchase.PurchaseOrder;
+import ru.ticketswap.purchase.PurchaseOrderRepository;
+import ru.ticketswap.purchase.PurchaseOrderStatus;
 import ru.ticketswap.storage.TicketFileStorageService;
 import ru.ticketswap.ticket.TicketLot;
 import ru.ticketswap.ticket.TicketRepository;
@@ -31,17 +35,20 @@ public class ManualOrganizerWorkflowService {
     private final ListingStatusHistoryService listingStatusHistoryService;
     private final ListingHoldRepository listingHoldRepository;
     private final TicketFileStorageService ticketFileStorageService;
+    private final PurchaseOrderRepository purchaseOrderRepository;
 
     public ManualOrganizerWorkflowService(
             TicketRepository ticketRepository,
             ListingStatusHistoryService listingStatusHistoryService,
             ListingHoldRepository listingHoldRepository,
-            TicketFileStorageService ticketFileStorageService
+            TicketFileStorageService ticketFileStorageService,
+            PurchaseOrderRepository purchaseOrderRepository
     ) {
         this.ticketRepository = ticketRepository;
         this.listingStatusHistoryService = listingStatusHistoryService;
         this.listingHoldRepository = listingHoldRepository;
         this.ticketFileStorageService = ticketFileStorageService;
+        this.purchaseOrderRepository = purchaseOrderRepository;
     }
 
     public List<TicketLot> listPendingValidation(Organizer organizer) {
@@ -111,6 +118,7 @@ public class ManualOrganizerWorkflowService {
                 MANUAL_REISSUE_COMPLETED_REASON,
                 actor
         );
+        markActiveOrdersCompleted(listingId);
         listingHoldRepository.deleteByListingId(listingId);
         return saved;
     }
@@ -124,15 +132,46 @@ public class ManualOrganizerWorkflowService {
             throw new BusinessRuleException("Билет не ожидает ручного перевыпуска");
         }
 
+        String failureReason = buildReason(MANUAL_REISSUE_REJECTED_REASON, reason);
         TicketLot saved = listingStatusHistoryService.transition(
                 listing,
                 TicketStatus.FAILED,
-                buildReason(MANUAL_REISSUE_REJECTED_REASON, reason),
+                failureReason,
                 actor
         );
+        markActiveOrdersRefundRequired(listingId, failureReason);
         listingHoldRepository.deleteByListingId(listingId);
         return saved;
     }
+
+
+
+    private void markActiveOrdersCompleted(Long listingId) {
+        for (PurchaseOrder order : purchaseOrderRepository.findAllByListingIdAndStatusIn(
+                listingId,
+                List.of(PurchaseOrderStatus.CREATED, PurchaseOrderStatus.PAYMENT_AUTHORIZED, PurchaseOrderStatus.PROCESSING_REISSUE, PurchaseOrderStatus.WAITING_MANUAL_REISSUE)
+        )) {
+            order.setStatus(PurchaseOrderStatus.COMPLETED);
+            order.setPaymentStatus(PaymentStatus.CAPTURED);
+            order.setCompletedAt(java.time.Instant.now());
+            purchaseOrderRepository.save(order);
+        }
+        purchaseOrderRepository.flush();
+    }
+
+    private void markActiveOrdersRefundRequired(Long listingId, String failureReason) {
+        for (PurchaseOrder order : purchaseOrderRepository.findAllByListingIdAndStatusIn(
+                listingId,
+                List.of(PurchaseOrderStatus.CREATED, PurchaseOrderStatus.PAYMENT_AUTHORIZED, PurchaseOrderStatus.PROCESSING_REISSUE, PurchaseOrderStatus.WAITING_MANUAL_REISSUE)
+        )) {
+            order.setStatus(PurchaseOrderStatus.REFUND_REQUIRED);
+            order.setPaymentStatus(PaymentStatus.REFUND_REQUIRED);
+            order.setFailureReason(failureReason);
+            purchaseOrderRepository.save(order);
+        }
+        purchaseOrderRepository.flush();
+    }
+
 
     private TicketLot loadOrganizerListing(Organizer organizer, Long listingId) {
         TicketLot listing = ticketRepository.findById(listingId)

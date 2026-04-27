@@ -40,7 +40,7 @@ spring:
 ticketswap:
   security:
     jwt:
-      secret: ${TICKETSWAP_JWT_SECRET:ticketswap-secret-ticketswap-secret-ticketswap-secret-123456}
+      secret: ${TICKETSWAP_JWT_SECRET:}
       expiration-ms: ${TICKETSWAP_JWT_EXPIRATION_MS:86400000}
     two-factor:
       code-expiration-ms: ${TICKETSWAP_2FA_CODE_EXPIRATION_MS:300000}
@@ -69,7 +69,8 @@ ticketswap:
     connect-timeout-ms: ${TICKETSWAP_PARTNER_API_CONNECT_TIMEOUT_MS:1000}
     read-timeout-ms: ${TICKETSWAP_PARTNER_API_READ_TIMEOUT_MS:2000}
   mock-partner:
-    internal-token: ${TICKETSWAP_MOCK_PARTNER_INTERNAL_TOKEN:ticketswap-local-mock-token-change-in-prod}
+    enabled: ${TICKETSWAP_MOCK_PARTNER_ENABLED:false}
+    internal-token: ${TICKETSWAP_MOCK_PARTNER_INTERNAL_TOKEN:}
   bootstrap:
     admin:
       enabled: ${TICKETSWAP_BOOTSTRAP_ADMIN_ENABLED:false}

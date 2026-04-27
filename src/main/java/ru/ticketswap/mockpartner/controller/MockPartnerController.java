@@ -1,5 +1,6 @@
 package ru.ticketswap.mockpartner.controller;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,6 +18,7 @@ import ru.ticketswap.mockpartner.service.MockPartnerService;
 import java.util.List;
 
 @RestController
+@ConditionalOnProperty(prefix = "ticketswap.mock-partner", name = "enabled", havingValue = "true")
 @RequestMapping("/api/mock/partners")
 public class MockPartnerController {
 

@@ -1,0 +1,110 @@
+databaseChangeLog:
+  - changeSet:
+      id: 025-create-purchase-orders
+      author: vanya
+      changes:
+        - createTable:
+            tableName: purchase_orders
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: listing_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_purchase_orders_listing
+                    references: tickets(id)
+              - column:
+                  name: buyer_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_purchase_orders_buyer
+                    references: users(id)
+              - column:
+                  name: seller_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_purchase_orders_seller
+                    references: users(id)
+              - column:
+                  name: status
+                  type: varchar(40)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: payment_status
+                  type: varchar(40)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: amount
+                  type: decimal(19, 2)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: currency
+                  type: varchar(3)
+                  defaultValue: RUB
+                  constraints:
+                    nullable: false
+              - column:
+                  name: idempotency_key
+                  type: varchar(128)
+              - column:
+                  name: partner_operation_id
+                  type: varchar(255)
+              - column:
+                  name: failure_reason
+                  type: varchar(2000)
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp with time zone
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: completed_at
+                  type: timestamp with time zone
+        - createIndex:
+            indexName: idx_purchase_orders_listing
+            tableName: purchase_orders
+            columns:
+              - column:
+                  name: listing_id
+        - createIndex:
+            indexName: idx_purchase_orders_buyer
+            tableName: purchase_orders
+            columns:
+              - column:
+                  name: buyer_id
+        - createIndex:
+            indexName: idx_purchase_orders_status
+            tableName: purchase_orders
+            columns:
+              - column:
+                  name: status
+        - createIndex:
+            indexName: uq_purchase_orders_idempotency
+            tableName: purchase_orders
+            unique: true
+            columns:
+              - column:
+                  name: listing_id
+              - column:
+                  name: buyer_id
+              - column:
+                  name: idempotency_key

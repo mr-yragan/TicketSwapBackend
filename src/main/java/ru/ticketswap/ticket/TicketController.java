@@ -213,9 +213,9 @@ public class TicketController {
         }
 
         Optional<ListingHold> activeHold = listingHoldRepository.findByListingIdAndHoldUntilAfter(id, Instant.now());
-        ListingViewResponse.Hold hold = activeHold
-                .map(h -> new ListingViewResponse.Hold(h.getId(), h.getHoldUntil()))
-                .orElse(null);
+        ListingViewResponse.Hold hold = canSeeHoldInfo(ticket, currentUser)
+                ? activeHold.map(h -> new ListingViewResponse.Hold(h.getId(), h.getHoldUntil())).orElse(null)
+                : null;
 
         ListingViewResponse response = new ListingViewResponse(
                 toDetailsResponse(ticket, currentUser),
@@ -295,6 +295,10 @@ public class TicketController {
 
         ResolvedListingInput resolved = resolveListingInput(request);
         boolean requiresRevalidation = requiresRevalidation(ticket, request, resolved);
+
+        if (requiresRevalidation && !ticket.hasTicketFile()) {
+            throw new BusinessRuleException("Нельзя отправить объявление на проверку без файла билета");
+        }
 
         applyEditableFields(ticket, request, resolved);
 
@@ -469,10 +473,11 @@ public class TicketController {
     @PostMapping("/{id}/buy")
     public ResponseEntity<ListingDetailsResponse> buyTicket(
             @PathVariable("id") Long id,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @AuthenticationPrincipal UserDetails userDetails
     ) {
         User buyer = requireUser(userDetails);
-        TicketLot saved = purchaseService.buyNow(id, buyer);
+        TicketLot saved = purchaseService.buyNow(id, buyer, idempotencyKey);
         return ResponseEntity.ok(toDetailsResponse(saved, buyer));
     }
 
@@ -652,8 +657,11 @@ public class TicketController {
     private void ensureSellerCanModifyFile(TicketLot ticket, User seller) {
         ensureSellerOwnsTicket(ticket, seller);
 
-        if (ticket.getStatus() == TicketStatus.PROCESSING || ticket.getStatus() == TicketStatus.COMPLETED) {
-            throw new BusinessRuleException("Файлы билета нельзя изменить после начала покупки");
+        if (ticket.getStatus() == TicketStatus.PENDING_VALIDATION
+                || ticket.getStatus() == TicketStatus.PENDING_RECIPIENT
+                || ticket.getStatus() == TicketStatus.PROCESSING
+                || ticket.getStatus() == TicketStatus.COMPLETED) {
+            throw new BusinessRuleException("Файлы билета нельзя изменить после отправки объявления на проверку; создайте новое объявление или измените данные объявления для повторной проверки");
         }
 
         if (hasActiveHold(ticket.getId())) {
@@ -711,7 +719,19 @@ public class TicketController {
     }
 
     private boolean isVisibleForPublic(TicketLot ticket) {
-        return ticket.getStatus() == TicketStatus.PENDING_RECIPIENT;
+        return ticket.getStatus() == TicketStatus.PENDING_RECIPIENT
+                && ticket.getOrganizer() != null
+                && !ticket.getOrganizer().isBanned()
+                && ticket.getEventDate() != null
+                && ticket.getEventDate().isAfter(LocalDateTime.now());
+    }
+
+    private boolean canSeeHoldInfo(TicketLot ticket, User currentUser) {
+        return isAdmin(currentUser) || isSeller(ticket, currentUser) || isBuyer(ticket, currentUser) || isOrganizerForTicket(ticket, currentUser);
+    }
+
+    private boolean canSeePrivateListingFields(TicketLot ticket, User viewer) {
+        return isAdmin(viewer) || isSeller(ticket, viewer) || isBuyer(ticket, viewer) || isOrganizerForTicket(ticket, viewer);
     }
 
     private boolean hasActiveHold(Long listingId) {
@@ -813,7 +833,7 @@ public class TicketController {
         if (ticket.getSeller() != null) {
             String displayName = ticket.getSeller().getLogin();
             if (displayName == null || displayName.isBlank()) {
-                displayName = ticket.getSeller().getEmail();
+                displayName = "seller-" + ticket.getSeller().getId();
             }
             sellerInfo = new ListingDetailsResponse.SellerInfo(displayName, ticket.getSeller().getCreatedAt());
         }
@@ -827,7 +847,7 @@ public class TicketController {
                 isVerified(ticket),
                 ticket.getAdditionalInfo(),
                 ticket.getOrganizerName(),
-                ticket.getSellerComment(),
+                canSeePrivateListingFields(ticket, viewer) ? ticket.getSellerComment() : null,
                 isBuyer(ticket, viewer) ? ticket.getReissuedTicketUid() : null,
                 sellerInfo,
                 ticket.hasTicketFile(),

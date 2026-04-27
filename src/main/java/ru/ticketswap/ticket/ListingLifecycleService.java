@@ -83,6 +83,11 @@ public class ListingLifecycleService {
             return null;
         }
 
+        if (!lot.hasTicketFile()) {
+            listingStatusHistoryService.transition(lot, TicketStatus.FAILED, "Проверка не пройдена: файл билета не загружен", null);
+            return null;
+        }
+
         LocalDateTime now = LocalDateTime.now(clock);
         if (lot.getEventDate() != null && lot.getEventDate().isBefore(now)) {
             listingStatusHistoryService.transition(lot, TicketStatus.FAILED, VALIDATION_FAILED_PAST_EVENT_REASON, null);

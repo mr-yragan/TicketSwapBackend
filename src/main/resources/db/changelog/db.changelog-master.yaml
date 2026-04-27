@@ -146,3 +146,6 @@ databaseChangeLog:
   - include:
       file: changes/024-users-token-version.yaml
       relativeToChangelogFile: true
+  - include:
+      file: changes/025-purchase-orders.yaml
+      relativeToChangelogFile: true

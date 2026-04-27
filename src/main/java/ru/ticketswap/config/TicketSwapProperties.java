@@ -326,8 +326,16 @@ public class TicketSwapProperties {
 
 
     public static class MockPartner {
-        
+        private boolean enabled = false;
         private String internalToken;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
 
         public String getInternalToken() {
             return internalToken;

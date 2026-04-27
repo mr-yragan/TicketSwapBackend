@@ -61,18 +61,19 @@ public class EventSearchService {
     }
 
     public List<EventSearchResponse> searchUpcomingEvents(String query, Long organizerId, int limit) {
-        if (properties.isEnabled()) {
-            try {
-                List<EventSearchResponse> elasticResults = searchInElasticsearch(query, organizerId, limit);
-                if (!elasticResults.isEmpty() || query == null || query.isBlank()) {
-                    return elasticResults;
-                }
-            } catch (RuntimeException ex) {
-                log.warn("Elasticsearch event search failed; falling back to database search", ex);
-            }
+        List<EventSearchResponse> databaseResults = searchInDatabase(query, organizerId, limit);
+
+        if (!properties.isEnabled()) {
+            return databaseResults;
         }
 
-        return searchInDatabase(query, organizerId, limit);
+        try {
+            List<EventSearchResponse> elasticResults = searchInElasticsearch(query, organizerId, limit);
+            return mergeSearchResults(databaseResults, elasticResults, limit);
+        } catch (RuntimeException ex) {
+            log.warn("Elasticsearch event search failed; using database search as source of truth", ex);
+            return databaseResults;
+        }
     }
 
     public void indexEvent(Event event) {
@@ -135,6 +136,30 @@ public class EventSearchService {
     }
 
     @SuppressWarnings("unchecked")
+
+
+    private List<EventSearchResponse> mergeSearchResults(
+            List<EventSearchResponse> databaseResults,
+            List<EventSearchResponse> elasticResults,
+            int limit
+    ) {
+        Map<Long, EventSearchResponse> merged = new LinkedHashMap<>();
+        for (EventSearchResponse response : databaseResults) {
+            if (response.id() != null) {
+                merged.put(response.id(), response);
+            }
+        }
+        for (EventSearchResponse response : elasticResults) {
+            if (response.id() != null) {
+                merged.putIfAbsent(response.id(), response);
+            }
+        }
+        return merged.values().stream()
+                .limit(limit)
+                .toList();
+    }
+
+
     private List<EventSearchResponse> searchInElasticsearch(String query, Long organizerId, int limit) {
         Map<String, Object> response = elasticsearchClient
                 .post()

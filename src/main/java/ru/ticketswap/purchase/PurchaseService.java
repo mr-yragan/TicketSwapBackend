@@ -23,16 +23,20 @@ import ru.ticketswap.user.User;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 @Service
 public class PurchaseService {
 
     private static final long DEFAULT_HOLD_SECONDS = 5 * 60;
-    private static final String MANUAL_REISSUE_WAITING_REASON = "Оплата условно подтверждена; ожидает ручного аннулирования старого билета и загрузки нового билета организатором";
+    private static final String MANUAL_REISSUE_WAITING_REASON = "Оплата условно авторизована; ожидает ручного аннулирования старого билета и загрузки нового билета организатором";
+    private static final Pattern SAFE_IDEMPOTENCY_KEY = Pattern.compile("^[A-Za-z0-9_.:-]{8,128}$");
 
     private final TicketRepository ticketRepository;
     private final ListingHoldRepository listingHoldRepository;
+    private final PurchaseOrderRepository purchaseOrderRepository;
     private final TransactionTemplate tx;
     private final ListingStatusHistoryService listingStatusHistoryService;
     private final PartnerApiClient partnerApiClient;
@@ -41,6 +45,7 @@ public class PurchaseService {
     public PurchaseService(
             TicketRepository ticketRepository,
             ListingHoldRepository listingHoldRepository,
+            PurchaseOrderRepository purchaseOrderRepository,
             PlatformTransactionManager transactionManager,
             ListingStatusHistoryService listingStatusHistoryService,
             PartnerApiClient partnerApiClient,
@@ -48,6 +53,7 @@ public class PurchaseService {
     ) {
         this.ticketRepository = ticketRepository;
         this.listingHoldRepository = listingHoldRepository;
+        this.purchaseOrderRepository = purchaseOrderRepository;
         this.tx = new TransactionTemplate(transactionManager);
         this.listingStatusHistoryService = listingStatusHistoryService;
         this.partnerApiClient = partnerApiClient;
@@ -63,23 +69,36 @@ public class PurchaseService {
     }
 
     public TicketLot buyNow(Long listingId, User buyer) {
+        return buyNow(listingId, buyer, null);
+    }
+
+    public TicketLot buyNow(Long listingId, User buyer, String idempotencyKey) {
+        String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
+
         TicketLot alreadyCompleted = tx.execute(status -> loadCompletedPurchaseIfAlreadyBought(listingId, buyer));
         if (alreadyCompleted != null) {
             return alreadyCompleted;
         }
 
-        tx.executeWithoutResult(status -> startProcessingTx(listingId, buyer));
-
-        if (requiresManualReissue(listingId)) {
-            return tx.execute(status -> markWaitingManualReissueTx(listingId, buyer));
+        StartProcessingResult started = tx.execute(status -> startProcessingTx(listingId, buyer, normalizedIdempotencyKey));
+        if (started == null) {
+            throw new ConflictException("Покупка не была начата");
+        }
+        if (started.completedListing() != null) {
+            return started.completedListing();
         }
 
+        if (started.manual()) {
+            return tx.execute(status -> markWaitingManualReissueTx(listingId, buyer, started.orderId()));
+        }
+
+        tx.executeWithoutResult(status -> markPartnerOperationStartedTx(started.orderId()));
         ReissueResult reissueResult = reissueTicketWithPartner(listingId, buyer);
         if (!reissueResult.success()) {
-            return tx.execute(status -> failPurchaseTx(listingId, buyer, reissueResult.failureReason()));
+            return tx.execute(status -> failPurchaseTx(listingId, buyer, started.orderId(), reissueResult.failureReason()));
         }
 
-        return tx.execute(status -> completePurchaseTx(listingId, buyer, reissueResult.reissuedTicketUid()));
+        return tx.execute(status -> completePurchaseTx(listingId, buyer, started.orderId(), reissueResult.reissuedTicketUid()));
     }
 
     private TicketLot loadCompletedPurchaseIfAlreadyBought(Long listingId, User buyer) {
@@ -134,8 +153,36 @@ public class PurchaseService {
         listingHoldRepository.delete(hold);
     }
 
-    private void startProcessingTx(Long listingId, User buyer) {
+    private StartProcessingResult startProcessingTx(Long listingId, User buyer, String idempotencyKey) {
         TicketLot listing = loadListingForPurchase(listingId, buyer);
+
+        if (idempotencyKey != null) {
+            Optional<PurchaseOrder> existing = purchaseOrderRepository.findByListingIdAndBuyerIdAndIdempotencyKey(
+                    listingId,
+                    buyer.getId(),
+                    idempotencyKey
+            );
+            if (existing.isPresent()) {
+                PurchaseOrder order = existing.get();
+                if (order.getStatus() == PurchaseOrderStatus.COMPLETED && listing.getStatus() == TicketStatus.COMPLETED && isBuyer(listing, buyer)) {
+                    return StartProcessingResult.completed(listing);
+                }
+                throw new ConflictException("Покупка с таким Idempotency-Key уже обрабатывалась; проверьте статус заказа перед повтором");
+            }
+        }
+
+        List<PurchaseOrder> activeOrders = purchaseOrderRepository.findAllByListingIdAndStatusIn(
+                listingId,
+                List.of(
+                        PurchaseOrderStatus.CREATED,
+                        PurchaseOrderStatus.PAYMENT_AUTHORIZED,
+                        PurchaseOrderStatus.PROCESSING_REISSUE,
+                        PurchaseOrderStatus.WAITING_MANUAL_REISSUE
+                )
+        );
+        if (!activeOrders.isEmpty()) {
+            throw new ConflictException("По этому объявлению уже есть активная покупка");
+        }
 
         ListingHold hold = createHoldTx(listingId, buyer);
         Instant now = Instant.now();
@@ -144,14 +191,22 @@ public class PurchaseService {
         }
 
         listing.setBuyer(buyer);
-        listingStatusHistoryService.transition(listing, TicketStatus.PROCESSING, "Покупка начата", buyer);
+        listingStatusHistoryService.transition(listing, TicketStatus.PROCESSING, "Покупка начата, платёж условно авторизован", buyer);
+
+        PurchaseOrder order = new PurchaseOrder(listing, buyer, idempotencyKey);
+        order.setPaymentStatus(PaymentStatus.AUTHORIZED);
+        order.setStatus(requiresManualReissue(listing) ? PurchaseOrderStatus.WAITING_MANUAL_REISSUE : PurchaseOrderStatus.PROCESSING_REISSUE);
+        PurchaseOrder savedOrder = purchaseOrderRepository.saveAndFlush(order);
+
+        return new StartProcessingResult(savedOrder.getId(), requiresManualReissue(listing), null);
     }
 
-    private TicketLot markWaitingManualReissueTx(Long listingId, User buyer) {
+    private TicketLot markWaitingManualReissueTx(Long listingId, User buyer, Long orderId) {
         TicketLot listing = ticketRepository.findByIdForUpdate(listingId)
                 .orElseThrow(() -> new NotFoundException("Билет не найден"));
 
         ensureProcessingBuyer(listing, buyer);
+        updateOrder(orderId, PurchaseOrderStatus.WAITING_MANUAL_REISSUE, PaymentStatus.AUTHORIZED, null, null, false);
         listingStatusHistoryService.recordStatus(
                 listing,
                 TicketStatus.PROCESSING,
@@ -162,12 +217,21 @@ public class PurchaseService {
         return listing;
     }
 
-    private TicketLot completePurchaseTx(Long listingId, User buyer, String reissuedTicketUid) {
+    private void markPartnerOperationStartedTx(Long orderId) {
+        PurchaseOrder order = purchaseOrderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Заказ не найден"));
+        order.setPartnerOperationId("REISSUE-" + order.getListing().getId() + "-" + order.getId());
+        order.setStatus(PurchaseOrderStatus.PROCESSING_REISSUE);
+        purchaseOrderRepository.saveAndFlush(order);
+    }
+
+    private TicketLot completePurchaseTx(Long listingId, User buyer, Long orderId, String reissuedTicketUid) {
         TicketLot listing = ticketRepository.findByIdForUpdate(listingId)
                 .orElseThrow(() -> new NotFoundException("Билет не найден"));
 
         if (listing.getStatus() == TicketStatus.COMPLETED) {
             if (isBuyer(listing, buyer)) {
+                updateOrder(orderId, PurchaseOrderStatus.COMPLETED, PaymentStatus.CAPTURED, null, Instant.now(), true);
                 return listing;
             }
             throw new ConflictException("Билет уже продан другому покупателю");
@@ -184,18 +248,20 @@ public class PurchaseService {
 
         listing.setReissuedTicketUid(reissuedTicketUid);
         listingStatusHistoryService.recordStatus(listing, listing.getStatus(), listing.getStatus(), "Билет перевыпущен партнёром", null);
-        TicketLot saved = listingStatusHistoryService.transition(listing, TicketStatus.COMPLETED, "Покупка завершена", buyer);
+        TicketLot saved = listingStatusHistoryService.transition(listing, TicketStatus.COMPLETED, "Покупка завершена, платёж захвачен", buyer);
 
+        updateOrder(orderId, PurchaseOrderStatus.COMPLETED, PaymentStatus.CAPTURED, null, Instant.now(), true);
         listingHoldRepository.deleteByListingId(listingId);
 
         return saved;
     }
 
-    private TicketLot failPurchaseTx(Long listingId, User buyer, String reason) {
+    private TicketLot failPurchaseTx(Long listingId, User buyer, Long orderId, String reason) {
         TicketLot listing = ticketRepository.findByIdForUpdate(listingId)
                 .orElseThrow(() -> new NotFoundException("Билет не найден"));
 
         if (listing.getStatus() == TicketStatus.COMPLETED) {
+            updateOrder(orderId, PurchaseOrderStatus.COMPLETED, PaymentStatus.CAPTURED, null, Instant.now(), true);
             return listing;
         }
 
@@ -203,14 +269,13 @@ public class PurchaseService {
             listing.setBuyer(buyer);
         }
 
-        TicketLot saved = listingStatusHistoryService.transition(listing, TicketStatus.FAILED, reason, null);
+        updateOrder(orderId, PurchaseOrderStatus.REFUND_REQUIRED, PaymentStatus.REFUND_REQUIRED, reason, null, true);
+        TicketLot saved = listingStatusHistoryService.transition(listing, TicketStatus.FAILED, reason + "; требуется возврат условно авторизованного платежа", null);
         listingHoldRepository.deleteByListingId(listingId);
         return saved;
     }
 
-    private boolean requiresManualReissue(Long listingId) {
-        TicketLot listing = ticketRepository.findById(listingId)
-                .orElseThrow(() -> new NotFoundException("Билет не найден"));
+    private boolean requiresManualReissue(TicketLot listing) {
         Organizer organizer = listing.getOrganizer();
         return organizer != null && organizer.getVerificationMode() == OrganizerVerificationMode.MANUAL;
     }
@@ -244,6 +309,32 @@ public class PurchaseService {
             return ReissueResult.success(response.newTicketUid());
         } catch (PartnerIntegrationException ex) {
             return ReissueResult.failed("Перевыпуск у партнёра не выполнен: ошибка интеграции");
+        }
+    }
+
+    private void updateOrder(
+            Long orderId,
+            PurchaseOrderStatus orderStatus,
+            PaymentStatus paymentStatus,
+            String failureReason,
+            Instant completedAt,
+            boolean flush
+    ) {
+        if (orderId == null) {
+            return;
+        }
+        PurchaseOrder order = purchaseOrderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Заказ не найден"));
+        order.setStatus(orderStatus);
+        order.setPaymentStatus(paymentStatus);
+        order.setFailureReason(failureReason);
+        if (completedAt != null) {
+            order.setCompletedAt(completedAt);
+        }
+        if (flush) {
+            purchaseOrderRepository.saveAndFlush(order);
+        } else {
+            purchaseOrderRepository.save(order);
         }
     }
 
@@ -298,6 +389,10 @@ public class PurchaseService {
             throw new BusinessRuleException("Билет недоступен для покупки");
         }
 
+        if (!listing.hasTicketFile()) {
+            throw new BusinessRuleException("Билет недоступен для покупки: файл билета не загружен");
+        }
+
         if (listing.getSeller() != null && listing.getSeller().getId() != null && listing.getSeller().getId().equals(buyer.getId())) {
             throw new BusinessRuleException("Нельзя купить свой собственный билет");
         }
@@ -316,6 +411,23 @@ public class PurchaseService {
         }
 
         return listing;
+    }
+
+    private String normalizeIdempotencyKey(String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return null;
+        }
+        String normalized = idempotencyKey.trim();
+        if (!SAFE_IDEMPOTENCY_KEY.matcher(normalized).matches()) {
+            throw new BusinessRuleException("Idempotency-Key должен быть от 8 до 128 символов и содержать только буквы, цифры, точку, подчёркивание, дефис или двоеточие");
+        }
+        return normalized;
+    }
+
+    private record StartProcessingResult(Long orderId, boolean manual, TicketLot completedListing) {
+        private static StartProcessingResult completed(TicketLot listing) {
+            return new StartProcessingResult(null, false, listing);
+        }
     }
 
     private record ReissueResult(

@@ -9,6 +9,15 @@ import ru.ticketswap.common.NotFoundException;
 import ru.ticketswap.organizer.Organizer;
 import ru.ticketswap.organizer.OrganizerRepository;
 import ru.ticketswap.organizer.OrganizerVerificationMode;
+import ru.ticketswap.hold.ListingHoldRepository;
+import ru.ticketswap.purchase.PaymentStatus;
+import ru.ticketswap.purchase.PurchaseOrder;
+import ru.ticketswap.purchase.PurchaseOrderRepository;
+import ru.ticketswap.purchase.PurchaseOrderStatus;
+import ru.ticketswap.ticket.TicketLot;
+import ru.ticketswap.ticket.TicketRepository;
+import ru.ticketswap.ticket.TicketStatus;
+import ru.ticketswap.ticket.history.ListingStatusHistoryService;
 import ru.ticketswap.user.User;
 import ru.ticketswap.user.UserIdentityService;
 import ru.ticketswap.user.UserRepository;
@@ -23,15 +32,27 @@ public class AdminOrganizerService {
     private final OrganizerRepository organizerRepository;
     private final UserRepository userRepository;
     private final UserIdentityService userIdentityService;
+    private final TicketRepository ticketRepository;
+    private final ListingHoldRepository listingHoldRepository;
+    private final PurchaseOrderRepository purchaseOrderRepository;
+    private final ListingStatusHistoryService listingStatusHistoryService;
 
     public AdminOrganizerService(
             OrganizerRepository organizerRepository,
             UserRepository userRepository,
-            UserIdentityService userIdentityService
+            UserIdentityService userIdentityService,
+            TicketRepository ticketRepository,
+            ListingHoldRepository listingHoldRepository,
+            PurchaseOrderRepository purchaseOrderRepository,
+            ListingStatusHistoryService listingStatusHistoryService
     ) {
         this.organizerRepository = organizerRepository;
         this.userRepository = userRepository;
         this.userIdentityService = userIdentityService;
+        this.ticketRepository = ticketRepository;
+        this.listingHoldRepository = listingHoldRepository;
+        this.purchaseOrderRepository = purchaseOrderRepository;
+        this.listingStatusHistoryService = listingStatusHistoryService;
     }
 
     public List<Organizer> listOrganizers() {
@@ -83,7 +104,9 @@ public class AdminOrganizerService {
     public Organizer banOrganizer(Long id) {
         Organizer organizer = loadOrganizer(id);
         organizer.setBanned(true);
-        return organizerRepository.save(organizer);
+        Organizer saved = organizerRepository.save(organizer);
+        suspendActiveListingsForBannedOrganizer(saved);
+        return saved;
     }
 
     @Transactional
@@ -92,6 +115,46 @@ public class AdminOrganizerService {
         organizer.setBanned(false);
         return organizerRepository.save(organizer);
     }
+
+
+
+    private void suspendActiveListingsForBannedOrganizer(Organizer organizer) {
+        for (TicketStatus status : List.of(
+                TicketStatus.CREATED,
+                TicketStatus.PENDING_VALIDATION,
+                TicketStatus.PENDING_RECIPIENT,
+                TicketStatus.PROCESSING
+        )) {
+            for (TicketLot listing : ticketRepository.findAllByOrganizerIdAndStatusOrderByCreatedAtAsc(organizer.getId(), status)) {
+                listingHoldRepository.deleteByListingId(listing.getId());
+                if (status == TicketStatus.PROCESSING) {
+                    markOrdersRefundRequired(listing.getId(), "Организатор заблокирован администратором; требуется возврат платежа");
+                }
+                listing.setBuyer(status == TicketStatus.PROCESSING ? listing.getBuyer() : null);
+                listingStatusHistoryService.transition(
+                        listing,
+                        TicketStatus.FAILED,
+                        "Объявление остановлено: организатор заблокирован администратором",
+                        null
+                );
+            }
+        }
+        listingHoldRepository.flush();
+    }
+
+    private void markOrdersRefundRequired(Long listingId, String reason) {
+        for (PurchaseOrder order : purchaseOrderRepository.findAllByListingIdAndStatusIn(
+                listingId,
+                List.of(PurchaseOrderStatus.CREATED, PurchaseOrderStatus.PAYMENT_AUTHORIZED, PurchaseOrderStatus.PROCESSING_REISSUE, PurchaseOrderStatus.WAITING_MANUAL_REISSUE)
+        )) {
+            order.setStatus(PurchaseOrderStatus.REFUND_REQUIRED);
+            order.setPaymentStatus(PaymentStatus.REFUND_REQUIRED);
+            order.setFailureReason(reason);
+            purchaseOrderRepository.save(order);
+        }
+        purchaseOrderRepository.flush();
+    }
+
 
     private Organizer loadOrganizer(Long id) {
         return organizerRepository.findById(id)

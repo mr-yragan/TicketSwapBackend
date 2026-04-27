@@ -82,7 +82,9 @@ public interface TicketRepository extends JpaRepository<TicketLot, Long>, JpaSpe
                     holdNow
             ))));
 
-            Join<TicketLot, ?> organizerJoin = root.join("organizer", JoinType.LEFT);
+            Join<TicketLot, ?> organizerJoin = root.join("organizer", JoinType.INNER);
+            predicates.add(criteriaBuilder.isFalse(organizerJoin.<Boolean>get("banned")));
+
             Join<TicketLot, ?> eventJoin = root.join("event", JoinType.LEFT);
 
             if (!queryBlank && query != null && !query.isBlank()) {
