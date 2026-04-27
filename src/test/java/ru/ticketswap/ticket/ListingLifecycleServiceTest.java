@@ -11,6 +11,7 @@ import org.springframework.transaction.TransactionStatus;
 import ru.ticketswap.partner.PartnerApiClient;
 import ru.ticketswap.partner.PartnerOrganizerCodeMapper;
 import ru.ticketswap.partner.PartnerIntegrationException;
+import ru.ticketswap.organizer.Organizer;
 import ru.ticketswap.partner.PartnerTicketVerifyResponse;
 import ru.ticketswap.ticket.history.ListingStatusHistoryService;
 import ru.ticketswap.user.User;
@@ -166,7 +167,7 @@ class ListingLifecycleServiceTest {
 
     private TicketLot createListing(String organizerName, LocalDateTime eventDate) {
         User seller = new User("seller@example.com", "hash");
-        return new TicketLot(
+        TicketLot lot = new TicketLot(
                 "uid-1",
                 "Концерт",
                 eventDate,
@@ -178,5 +179,7 @@ class ListingLifecycleServiceTest {
                 null,
                 seller
         );
+        lot.setOrganizer(new Organizer("Organizer " + organizerName, null, organizerName + "@example.com"));
+        return lot;
     }
 }

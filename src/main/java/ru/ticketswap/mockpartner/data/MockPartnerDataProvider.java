@@ -21,7 +21,7 @@ public class MockPartnerDataProvider {
     public boolean isSupportedOrganizer(String organizerCode) {
         return organizerCode != null
                 && !organizerCode.isBlank()
-                && organizerRepository.existsByApiKeyIgnoreCase(organizerCode.trim());
+                && organizerRepository.findByApiKeyIgnoreCase(organizerCode.trim()).map(organizer -> organizer.isExternalApi() && !organizer.isBanned()).orElse(false);
     }
 
     public List<Event> getEventsByOrganizerCode(String organizerCode) {

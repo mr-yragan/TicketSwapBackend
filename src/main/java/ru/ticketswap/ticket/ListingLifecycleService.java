@@ -3,6 +3,8 @@ package ru.ticketswap.ticket;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import ru.ticketswap.organizer.Organizer;
+import ru.ticketswap.organizer.OrganizerVerificationMode;
 import ru.ticketswap.partner.PartnerApiClient;
 import ru.ticketswap.partner.PartnerIntegrationException;
 import ru.ticketswap.partner.PartnerOrganizerCodeMapper;
@@ -21,6 +23,8 @@ public class ListingLifecycleService {
     private static final String PARTNER_VALIDATION_FAILED_REASON = "Проверка партнёра не пройдена";
     private static final String PARTNER_VALIDATION_UNSUPPORTED_ORGANIZER_REASON = "Проверка партнёра не пройдена: организатор не поддерживается";
     private static final String PARTNER_VALIDATION_INTEGRATION_ERROR_REASON = "Проверка партнёра не пройдена: ошибка интеграции";
+    private static final String MANUAL_VALIDATION_WAITING_REASON = "Ожидает ручной проверки организатором";
+    private static final String ORGANIZER_BANNED_REASON = "Проверка не пройдена: организатор заблокирован";
 
     private final TicketRepository ticketRepository;
     private final TransactionTemplate tx;
@@ -50,8 +54,12 @@ public class ListingLifecycleService {
             return null;
         }
 
-        PartnerValidationContext context = tx.execute(status -> startPartnerValidation(listingId));
+        ValidationContext context = tx.execute(status -> startValidation(listingId));
         if (context == null) {
+            return ticketRepository.findById(listingId).orElse(null);
+        }
+
+        if (context.manual()) {
             return ticketRepository.findById(listingId).orElse(null);
         }
 
@@ -65,7 +73,7 @@ public class ListingLifecycleService {
         return tx.execute(status -> applyPartnerValidationOutcome(listingId, outcome));
     }
 
-    private PartnerValidationContext startPartnerValidation(Long listingId) {
+    private ValidationContext startValidation(Long listingId) {
         TicketLot lot = ticketRepository.findById(listingId).orElse(null);
         if (lot == null) {
             return null;
@@ -81,12 +89,36 @@ public class ListingLifecycleService {
             return null;
         }
 
+        Organizer organizer = lot.getOrganizer();
+        if (organizer == null) {
+            listingStatusHistoryService.transition(lot, TicketStatus.FAILED, "Проверка не пройдена: организатор не выбран", null);
+            return null;
+        }
+
+        if (organizer.isBanned()) {
+            listingStatusHistoryService.transition(lot, TicketStatus.FAILED, ORGANIZER_BANNED_REASON, null);
+            return null;
+        }
+
         listingStatusHistoryService.transition(lot, TicketStatus.PENDING_VALIDATION, VALIDATION_STARTED_REASON, null);
 
-        return new PartnerValidationContext(
-                lot.getUid(),
-                partnerOrganizerCodeMapper.resolveOrganizerCode(lot.getOrganizerName()).orElse(null)
-        );
+        if (organizer.getVerificationMode() == OrganizerVerificationMode.MANUAL) {
+            listingStatusHistoryService.recordStatus(
+                    lot,
+                    TicketStatus.PENDING_VALIDATION,
+                    TicketStatus.PENDING_VALIDATION,
+                    MANUAL_VALIDATION_WAITING_REASON,
+                    null
+            );
+            return new ValidationContext(lot.getUid(), null, true);
+        }
+
+        String organizerCode = organizer.getApiKey();
+        if (organizerCode == null || organizerCode.isBlank()) {
+            organizerCode = partnerOrganizerCodeMapper.resolveOrganizerCode(lot.getOrganizerName()).orElse(null);
+        }
+
+        return new ValidationContext(lot.getUid(), organizerCode, false);
     }
 
     private PartnerValidationOutcome callPartnerApi(String organizerCode, String ticketUid) {
@@ -125,7 +157,7 @@ public class ListingLifecycleService {
         return listingStatusHistoryService.transition(lot, TicketStatus.FAILED, outcome.reason(), null);
     }
 
-    private record PartnerValidationContext(String ticketUid, String organizerCode) {
+    private record ValidationContext(String ticketUid, String organizerCode, boolean manual) {
     }
 
     private record PartnerValidationOutcome(boolean passed, String reason) {

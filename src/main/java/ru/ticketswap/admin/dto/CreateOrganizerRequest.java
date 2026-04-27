@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import ru.ticketswap.organizer.OrganizerVerificationMode;
 
 public record CreateOrganizerRequest(
         @NotBlank(message = "Название обязательно")
@@ -15,11 +16,16 @@ public record CreateOrganizerRequest(
         @Size(max = 255, message = "Контактная почта должна быть не длиннее 255 символов")
         String contactEmail,
 
-        @NotBlank(message = "API-ключ обязателен")
         @Pattern(
-                regexp = "^[A-Za-z0-9_-]{2,64}$",
+                regexp = "^$|^[A-Za-z0-9_-]{2,64}$",
                 message = "API-ключ может содержать только буквы, цифры, дефис и нижнее подчёркивание, длина от 2 до 64 символов"
         )
-        String apiKey
+        String apiKey,
+
+        OrganizerVerificationMode verificationMode
 ) {
+
+    public CreateOrganizerRequest(String name, String contactEmail, String apiKey) {
+        this(name, contactEmail, apiKey, OrganizerVerificationMode.EXTERNAL_API);
+    }
 }

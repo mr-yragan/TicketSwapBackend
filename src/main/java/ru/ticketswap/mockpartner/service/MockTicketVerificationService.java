@@ -20,6 +20,14 @@ public class MockTicketVerificationService {
         String ticketUid = request.ticketUid();
         validateTicketUid(ticketUid);
 
+        String normalizedTicketUid = ticketUid.trim().toUpperCase();
+        if (normalizedTicketUid.contains("INVALID")) {
+            return MockTicketVerifyResponse.invalid(ticketUid, organizerCode, INVALID_REASON);
+        }
+        if (normalizedTicketUid.contains("VALID") || normalizedTicketUid.contains("OK")) {
+            return MockTicketVerifyResponse.valid(ticketUid, organizerCode);
+        }
+
         int hash = ticketUid.hashCode();
         int bucket = Math.floorMod(hash, VALIDATION_BUCKETS);
         boolean valid = bucket < VALID_THRESHOLD;

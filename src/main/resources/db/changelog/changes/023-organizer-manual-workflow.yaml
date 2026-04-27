@@ -1,0 +1,82 @@
+databaseChangeLog:
+  - logicalFilePath: changes/023-organizer-manual-workflow.yaml
+
+  - changeSet:
+      id: 023-organizers-add-verification-mode-and-ban
+      author: vanya
+      changes:
+        - addColumn:
+            tableName: organizers
+            columns:
+              - column:
+                  name: verification_mode
+                  type: varchar(32)
+                  defaultValue: EXTERNAL_API
+                  constraints:
+                    nullable: false
+              - column:
+                  name: banned
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+        - dropNotNullConstraint:
+            tableName: organizers
+            columnName: api_key
+            columnDataType: varchar(64)
+
+  - changeSet:
+      id: 023-tickets-add-organizer-and-reissued-file
+      author: vanya
+      changes:
+        - addColumn:
+            tableName: tickets
+            columns:
+              - column:
+                  name: organizer_id
+                  type: bigint
+              - column:
+                  name: reissued_file_object_key
+                  type: varchar(1024)
+              - column:
+                  name: reissued_file_original_name
+                  type: varchar(255)
+              - column:
+                  name: reissued_file_content_type
+                  type: varchar(255)
+              - column:
+                  name: reissued_file_size_bytes
+                  type: bigint
+              - column:
+                  name: reissued_file_uploaded_at
+                  type: timestamp with time zone
+        - sql:
+            dbms: postgresql
+            splitStatements: true
+            stripComments: true
+            sql: |
+              UPDATE tickets t
+              SET organizer_id = o.id
+              FROM organizers o
+              WHERE t.organizer_id IS NULL
+                AND t.organizer_name IS NOT NULL
+                AND (
+                  lower(o.api_key) = lower(t.organizer_name)
+                  OR lower(o.name) = lower(t.organizer_name)
+                );
+        - addForeignKeyConstraint:
+            baseTableName: tickets
+            baseColumnNames: organizer_id
+            referencedTableName: organizers
+            referencedColumnNames: id
+            constraintName: fk_tickets_organizer
+        - createIndex:
+            tableName: tickets
+            indexName: idx_tickets_organizer_status
+            columns:
+              - column:
+                  name: organizer_id
+              - column:
+                  name: status
+              - column:
+                  name: created_at

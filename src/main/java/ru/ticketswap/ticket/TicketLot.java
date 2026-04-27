@@ -1,7 +1,21 @@
 package ru.ticketswap.ticket;
 
-import jakarta.persistence.*;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
+import jakarta.persistence.Table;
 import ru.ticketswap.event.Event;
+import ru.ticketswap.organizer.Organizer;
 import ru.ticketswap.user.User;
 
 import java.math.BigDecimal;
@@ -25,6 +39,21 @@ public class TicketLot {
     @Column(name = "reissued_ticket_uid")
     private String reissuedTicketUid;
 
+    @Column(name = "reissued_file_object_key", length = 1024)
+    private String reissuedFileObjectKey;
+
+    @Column(name = "reissued_file_original_name", length = 255)
+    private String reissuedFileOriginalName;
+
+    @Column(name = "reissued_file_content_type", length = 255)
+    private String reissuedFileContentType;
+
+    @Column(name = "reissued_file_size_bytes")
+    private Long reissuedFileSizeBytes;
+
+    @Column(name = "reissued_file_uploaded_at")
+    private Instant reissuedFileUploadedAt;
+
     @Column(nullable = false)
     private String eventName;
 
@@ -34,6 +63,10 @@ public class TicketLot {
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "event_id")
     private Event event;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "organizer_id")
+    private Organizer organizer;
 
     @Column(name = "venue_name", nullable = false)
     private String venueName;
@@ -125,6 +158,50 @@ public class TicketLot {
         this.reissuedTicketUid = reissuedTicketUid;
     }
 
+    public String getReissuedFileObjectKey() {
+        return reissuedFileObjectKey;
+    }
+
+    public void setReissuedFileObjectKey(String reissuedFileObjectKey) {
+        this.reissuedFileObjectKey = reissuedFileObjectKey;
+    }
+
+    public String getReissuedFileOriginalName() {
+        return reissuedFileOriginalName;
+    }
+
+    public void setReissuedFileOriginalName(String reissuedFileOriginalName) {
+        this.reissuedFileOriginalName = reissuedFileOriginalName;
+    }
+
+    public String getReissuedFileContentType() {
+        return reissuedFileContentType;
+    }
+
+    public void setReissuedFileContentType(String reissuedFileContentType) {
+        this.reissuedFileContentType = reissuedFileContentType;
+    }
+
+    public Long getReissuedFileSizeBytes() {
+        return reissuedFileSizeBytes;
+    }
+
+    public void setReissuedFileSizeBytes(Long reissuedFileSizeBytes) {
+        this.reissuedFileSizeBytes = reissuedFileSizeBytes;
+    }
+
+    public Instant getReissuedFileUploadedAt() {
+        return reissuedFileUploadedAt;
+    }
+
+    public void setReissuedFileUploadedAt(Instant reissuedFileUploadedAt) {
+        this.reissuedFileUploadedAt = reissuedFileUploadedAt;
+    }
+
+    public boolean hasReissuedTicketFile() {
+        return reissuedFileObjectKey != null && !reissuedFileObjectKey.isBlank();
+    }
+
     public String getEventName() {
         return eventName;
     }
@@ -147,6 +224,14 @@ public class TicketLot {
 
     public void setEvent(Event event) {
         this.event = event;
+    }
+
+    public Organizer getOrganizer() {
+        return organizer;
+    }
+
+    public void setOrganizer(Organizer organizer) {
+        this.organizer = organizer;
     }
 
     public String getVenueName() {

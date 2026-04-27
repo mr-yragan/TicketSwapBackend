@@ -11,6 +11,7 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
 import ru.ticketswap.hold.ListingHold;
 import ru.ticketswap.hold.ListingHoldRepository;
+import ru.ticketswap.organizer.Organizer;
 import ru.ticketswap.partner.PartnerApiClient;
 import ru.ticketswap.partner.PartnerIntegrationException;
 import ru.ticketswap.partner.PartnerOrganizerCodeMapper;
@@ -164,6 +165,7 @@ class PurchaseServiceTest {
     @Test
     void buyNowFailsListingWithoutPartnerCallWhenOrganizerUnsupported() {
         listing.setOrganizerName("unsupported");
+        listing.setOrganizer(new Organizer("Unsupported", null, "unsupported@example.com"));
         when(partnerOrganizerCodeMapper.resolveOrganizerCode("unsupported")).thenReturn(Optional.empty());
 
         TicketLot saved = service.buyNow(1L, buyer);
@@ -188,7 +190,7 @@ class PurchaseServiceTest {
     }
 
     private TicketLot createListing(String uid, String organizerName) {
-        return new TicketLot(
+        TicketLot lot = new TicketLot(
                 uid,
                 "Концерт",
                 LocalDateTime.now().plusDays(10),
@@ -200,6 +202,8 @@ class PurchaseServiceTest {
                 null,
                 seller
         );
+        lot.setOrganizer(new Organizer("Organizer " + organizerName, null, organizerName + "@example.com"));
+        return lot;
     }
 
     private User createUser(Long id, String email) {

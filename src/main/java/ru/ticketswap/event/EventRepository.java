@@ -20,6 +20,9 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     @EntityGraph(attributePaths = {"organizer", "venue"})
     Optional<Event> findByOrganizerApiKeyIgnoreCaseAndEventIdIgnoreCase(String apiKey, String eventId);
 
+    @EntityGraph(attributePaths = {"organizer", "venue"})
+    Optional<Event> findByOrganizerIdAndEventIdIgnoreCase(Long organizerId, String eventId);
+
     boolean existsByOrganizerIdAndEventIdIgnoreCase(Long organizerId, String eventId);
 
     boolean existsByOrganizerIdAndEventIdIgnoreCaseAndIdNot(Long organizerId, String eventId, Long id);

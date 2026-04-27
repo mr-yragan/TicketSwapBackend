@@ -9,6 +9,8 @@ import ru.ticketswap.common.ConflictException;
 import ru.ticketswap.common.NotFoundException;
 import ru.ticketswap.hold.ListingHold;
 import ru.ticketswap.hold.ListingHoldRepository;
+import ru.ticketswap.organizer.Organizer;
+import ru.ticketswap.organizer.OrganizerVerificationMode;
 import ru.ticketswap.partner.PartnerApiClient;
 import ru.ticketswap.partner.PartnerIntegrationException;
 import ru.ticketswap.partner.PartnerOrganizerCodeMapper;
@@ -21,7 +23,6 @@ import ru.ticketswap.user.User;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.Optional;
 
 @Service
@@ -29,6 +30,7 @@ public class PurchaseService {
 
     private static final long DEFAULT_HOLD_SECONDS = 5 * 60;
     private static final long MOCK_PAYMENT_DELAY_MS = 2_000;
+    private static final String MANUAL_REISSUE_WAITING_REASON = "Оплата условно подтверждена; ожидает ручного аннулирования старого билета и загрузки нового билета организатором";
 
     private final TicketRepository ticketRepository;
     private final ListingHoldRepository listingHoldRepository;
@@ -69,6 +71,10 @@ public class PurchaseService {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new BusinessRuleException("Платёж был прерван");
+        }
+
+        if (requiresManualReissue(listingId)) {
+            return tx.execute(status -> markWaitingManualReissueTx(listingId, buyer));
         }
 
         ReissueResult reissueResult = reissueTicketWithPartner(listingId, buyer);
@@ -142,6 +148,21 @@ public class PurchaseService {
         listingStatusHistoryService.transition(listing, TicketStatus.PROCESSING, "Покупка начата", buyer);
     }
 
+    private TicketLot markWaitingManualReissueTx(Long listingId, User buyer) {
+        TicketLot listing = ticketRepository.findById(listingId)
+                .orElseThrow(() -> new NotFoundException("Билет не найден"));
+
+        ensureProcessingBuyer(listing, buyer);
+        listingStatusHistoryService.recordStatus(
+                listing,
+                TicketStatus.PROCESSING,
+                TicketStatus.PROCESSING,
+                MANUAL_REISSUE_WAITING_REASON,
+                null
+        );
+        return listing;
+    }
+
     private TicketLot completePurchaseTx(Long listingId, User buyer, String reissuedTicketUid) {
         TicketLot listing = ticketRepository.findById(listingId)
                 .orElseThrow(() -> new NotFoundException("Билет не найден"));
@@ -183,18 +204,31 @@ public class PurchaseService {
         return saved;
     }
 
+    private boolean requiresManualReissue(Long listingId) {
+        TicketLot listing = ticketRepository.findById(listingId)
+                .orElseThrow(() -> new NotFoundException("Билет не найден"));
+        Organizer organizer = listing.getOrganizer();
+        return organizer != null && organizer.getVerificationMode() == OrganizerVerificationMode.MANUAL;
+    }
+
     private ReissueResult reissueTicketWithPartner(Long listingId, User buyer) {
         TicketLot listing = ticketRepository.findById(listingId)
                 .orElseThrow(() -> new NotFoundException("Билет не найден"));
 
-        Optional<String> organizerCode = partnerOrganizerCodeMapper.resolveOrganizerCode(listing.getOrganizerName());
-        if (organizerCode.isEmpty()) {
+        String organizerCode = null;
+        if (listing.getOrganizer() != null) {
+            organizerCode = listing.getOrganizer().getApiKey();
+        }
+        if (organizerCode == null || organizerCode.isBlank()) {
+            organizerCode = partnerOrganizerCodeMapper.resolveOrganizerCode(listing.getOrganizerName()).orElse(null);
+        }
+        if (organizerCode == null || organizerCode.isBlank()) {
             return ReissueResult.failed("Перевыпуск у партнёра не выполнен: организатор не поддерживается");
         }
 
         try {
             PartnerTicketReissueResponse response = partnerApiClient.reissueTicket(
-                    organizerCode.get(),
+                    organizerCode,
                     listing.getUid(),
                     buyer.getEmail()
             );
@@ -206,6 +240,15 @@ public class PurchaseService {
             return ReissueResult.success(response.newTicketUid());
         } catch (PartnerIntegrationException ex) {
             return ReissueResult.failed("Перевыпуск у партнёра не выполнен: ошибка интеграции");
+        }
+    }
+
+    private void ensureProcessingBuyer(TicketLot listing, User buyer) {
+        if (listing.getStatus() != TicketStatus.PROCESSING) {
+            throw new BusinessRuleException("Покупка не находится в обработке");
+        }
+        if (listing.getBuyer() == null || listing.getBuyer().getId() == null || !listing.getBuyer().getId().equals(buyer.getId())) {
+            throw new ConflictException("Это объявление обрабатывается для другого покупателя");
         }
     }
 
@@ -242,6 +285,14 @@ public class PurchaseService {
         LocalDateTime now = LocalDateTime.now();
         if (listing.getEventDate() != null && listing.getEventDate().isBefore(now)) {
             throw new BusinessRuleException("Мероприятие уже прошло");
+        }
+
+        Organizer organizer = listing.getOrganizer();
+        if (organizer == null) {
+            throw new BusinessRuleException("У объявления не выбран зарегистрированный организатор");
+        }
+        if (organizer.isBanned()) {
+            throw new BusinessRuleException("Организатор этого билета заблокирован");
         }
 
         return listing;

@@ -1,5 +1,7 @@
 package ru.ticketswap.organizer.dto;
 
+import ru.ticketswap.organizer.OrganizerVerificationMode;
+
 public record OrganizerProfileResponse(
         UserInfo user,
         OrganizerInfo organizer
@@ -18,7 +20,9 @@ public record OrganizerProfileResponse(
             Long id,
             String name,
             String apiKey,
-            String contactEmail
+            String contactEmail,
+            OrganizerVerificationMode verificationMode,
+            boolean banned
     ) {
     }
 }

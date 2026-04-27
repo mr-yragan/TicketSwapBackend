@@ -1,6 +1,7 @@
 package ru.ticketswap.ticket;
 
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +17,8 @@ import ru.ticketswap.common.UnauthorizedException;
 import ru.ticketswap.hold.ListingHold;
 import ru.ticketswap.hold.ListingHoldRepository;
 import ru.ticketswap.hold.dto.ListingHoldResponse;
+import ru.ticketswap.organizer.Organizer;
+import ru.ticketswap.organizer.OrganizerRepository;
 import ru.ticketswap.partner.PartnerOrganizerCodeMapper;
 import ru.ticketswap.purchase.PurchaseService;
 import ru.ticketswap.storage.TicketFileStorageService;
@@ -50,9 +53,37 @@ public class TicketController {
     private final ListingLifecycleService listingLifecycleService;
     private final ListingWriteService listingWriteService;
     private final PartnerOrganizerCodeMapper partnerOrganizerCodeMapper;
+    private final OrganizerRepository organizerRepository;
     private final EventRepository eventRepository;
     private final TicketFileStorageService ticketFileStorageService;
     private final ListingStatusHistoryService listingStatusHistoryService;
+
+    @Autowired
+    public TicketController(
+            TicketRepository ticketRepository,
+            UserRepository userRepository,
+            ListingHoldRepository listingHoldRepository,
+            PurchaseService purchaseService,
+            ListingLifecycleService listingLifecycleService,
+            ListingWriteService listingWriteService,
+            PartnerOrganizerCodeMapper partnerOrganizerCodeMapper,
+            OrganizerRepository organizerRepository,
+            EventRepository eventRepository,
+            TicketFileStorageService ticketFileStorageService,
+            ListingStatusHistoryService listingStatusHistoryService
+    ) {
+        this.ticketRepository = ticketRepository;
+        this.userRepository = userRepository;
+        this.listingHoldRepository = listingHoldRepository;
+        this.purchaseService = purchaseService;
+        this.listingLifecycleService = listingLifecycleService;
+        this.listingWriteService = listingWriteService;
+        this.partnerOrganizerCodeMapper = partnerOrganizerCodeMapper;
+        this.organizerRepository = organizerRepository;
+        this.eventRepository = eventRepository;
+        this.ticketFileStorageService = ticketFileStorageService;
+        this.listingStatusHistoryService = listingStatusHistoryService;
+    }
 
     public TicketController(
             TicketRepository ticketRepository,
@@ -66,16 +97,19 @@ public class TicketController {
             TicketFileStorageService ticketFileStorageService,
             ListingStatusHistoryService listingStatusHistoryService
     ) {
-        this.ticketRepository = ticketRepository;
-        this.userRepository = userRepository;
-        this.listingHoldRepository = listingHoldRepository;
-        this.purchaseService = purchaseService;
-        this.listingLifecycleService = listingLifecycleService;
-        this.listingWriteService = listingWriteService;
-        this.partnerOrganizerCodeMapper = partnerOrganizerCodeMapper;
-        this.eventRepository = eventRepository;
-        this.ticketFileStorageService = ticketFileStorageService;
-        this.listingStatusHistoryService = listingStatusHistoryService;
+        this(
+                ticketRepository,
+                userRepository,
+                listingHoldRepository,
+                purchaseService,
+                listingLifecycleService,
+                listingWriteService,
+                partnerOrganizerCodeMapper,
+                null,
+                eventRepository,
+                ticketFileStorageService,
+                listingStatusHistoryService
+        );
     }
 
     @GetMapping
@@ -102,7 +136,7 @@ public class TicketController {
         TicketLot ticket = loadTicket(id);
         User currentUser = tryLoadUser(userDetails);
 
-        if (!isVisibleForPublic(ticket) && !isSeller(ticket, currentUser)) {
+        if (!isVisibleForPublic(ticket) && !isSeller(ticket, currentUser) && !isBuyer(ticket, currentUser) && !isOrganizerForTicket(ticket, currentUser)) {
             throw new NotFoundException("Билет не найден");
         }
 
@@ -112,7 +146,7 @@ public class TicketController {
                 .orElse(null);
 
         ListingViewResponse response = new ListingViewResponse(
-                toDetailsResponse(ticket),
+                toDetailsResponse(ticket, currentUser),
                 ticket.getStatus(),
                 hold
         );
@@ -128,7 +162,7 @@ public class TicketController {
         TicketLot ticket = loadTicket(id);
         User currentUser = tryLoadUser(userDetails);
 
-        if (!isVisibleForPublic(ticket) && !isSeller(ticket, currentUser)) {
+        if (!isVisibleForPublic(ticket) && !isSeller(ticket, currentUser) && !isBuyer(ticket, currentUser) && !isOrganizerForTicket(ticket, currentUser)) {
             throw new NotFoundException("Билет не найден");
         }
 
@@ -200,7 +234,7 @@ public class TicketController {
             saved = ticketRepository.saveAndFlush(ticket);
         }
 
-        return ResponseEntity.ok(toDetailsResponse(saved));
+        return ResponseEntity.ok(toDetailsResponse(saved, seller));
     }
 
     @DeleteMapping("/{id}")
@@ -283,6 +317,17 @@ public class TicketController {
         return ResponseEntity.ok(ticketFileStorageService.createDownloadUrl(ticket, fileId));
     }
 
+    @GetMapping("/{id}/reissued-file/download-url")
+    public ResponseEntity<TicketFileDownloadUrlResponse> getReissuedTicketFileDownloadUrl(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        User currentUser = requireUser(userDetails);
+        TicketLot ticket = loadTicket(id);
+        ensureCanReadReissuedTicket(ticket, currentUser);
+        return ResponseEntity.ok(ticketFileStorageService.createReissuedTicketDownloadUrl(ticket));
+    }
+
     @DeleteMapping("/{id}/file")
     public ResponseEntity<Void> deleteAllTicketFilesCompatibility(
             @PathVariable("id") Long id,
@@ -356,7 +401,7 @@ public class TicketController {
     ) {
         User buyer = requireUser(userDetails);
         TicketLot saved = purchaseService.buyNow(id, buyer);
-        return ResponseEntity.ok(toDetailsResponse(saved));
+        return ResponseEntity.ok(toDetailsResponse(saved, buyer));
     }
 
     @GetMapping("/my")
@@ -372,7 +417,8 @@ public class TicketController {
 
     private TicketLot createListing(CreateTicketRequest request, User seller) {
         VenueParts venueParts = parseVenueParts(request.venue());
-        Event linkedEvent = resolveLinkedEvent(request);
+        Organizer organizer = resolveOrganizer(request);
+        Event linkedEvent = resolveLinkedEvent(request, organizer);
 
         TicketLot ticket = new TicketLot(
                 request.uid(),
@@ -382,31 +428,63 @@ public class TicketController {
                 venueParts.venueCity(),
                 request.price(),
                 request.additionalInfo(),
-                request.organizerName(),
+                organizer.getName(),
                 request.sellerComment(),
                 seller
         );
+        ticket.setOrganizer(organizer);
         ticket.setEvent(linkedEvent);
 
         return listingStatusHistoryService.createListingWithInitialStatus(ticket, "Объявление создано", seller);
     }
 
-    private Event resolveLinkedEvent(CreateTicketRequest request) {
+    private Organizer resolveOrganizer(CreateTicketRequest request) {
+        if (organizerRepository == null) {
+            String organizerName = request.organizerName();
+            if (organizerName == null || organizerName.isBlank()) {
+                throw new BusinessRuleException("Нужно выбрать зарегистрированного организатора");
+            }
+            String normalized = organizerName.trim();
+            return new Organizer(normalized, normalized, "compat-organizer@example.invalid");
+        }
+
+        if (request.organizerId() != null) {
+            Organizer organizer = organizerRepository.findById(request.organizerId())
+                    .orElseThrow(() -> new BusinessRuleException("Организатор не зарегистрирован"));
+            ensureOrganizerCanAcceptListings(organizer);
+            return organizer;
+        }
+
+        String organizerName = request.organizerName();
+        if (organizerName == null || organizerName.isBlank()) {
+            throw new BusinessRuleException("Нужно выбрать зарегистрированного организатора");
+        }
+
+        String normalized = organizerName.trim();
+        Organizer organizer = organizerRepository.findByApiKeyIgnoreCase(normalized)
+                .or(() -> organizerRepository.findByNameIgnoreCase(normalized))
+                .orElseThrow(() -> new BusinessRuleException("Организатор не зарегистрирован"));
+        ensureOrganizerCanAcceptListings(organizer);
+        return organizer;
+    }
+
+    private void ensureOrganizerCanAcceptListings(Organizer organizer) {
+        if (organizer.isBanned()) {
+            throw new BusinessRuleException("Организатор заблокирован и не может принимать новые билеты");
+        }
+    }
+
+    private Event resolveLinkedEvent(CreateTicketRequest request, Organizer organizer) {
         if (request.eventId() == null || request.eventId().isBlank()) {
             return null;
         }
 
-        Optional<String> organizerCode = partnerOrganizerCodeMapper.resolveOrganizerCode(request.organizerName());
-        if (organizerCode.isEmpty()) {
-            throw new BusinessRuleException("ID мероприятия указан, но организатор не поддерживается");
-        }
-
         return eventRepository
-                .findByOrganizerApiKeyIgnoreCaseAndEventIdIgnoreCase(
-                        organizerCode.get(),
+                .findByOrganizerIdAndEventIdIgnoreCase(
+                        organizer.getId(),
                         request.eventId().trim()
                 )
-                .orElseThrow(() -> new BusinessRuleException("ID мероприятия указан, но мероприятие не найдено"));
+                .orElseThrow(() -> new BusinessRuleException("ID мероприятия указан, но мероприятие не найдено у выбранного организатора"));
     }
 
     private TicketLot loadTicket(Long id) {
@@ -464,13 +542,32 @@ public class TicketController {
         boolean isSeller = isSeller(ticket, currentUser);
         boolean isCompletedBuyer = currentUser != null
                 && ticket.getStatus() == TicketStatus.COMPLETED
+                && isBuyer(ticket, currentUser);
+        boolean isOrganizer = isOrganizerForTicket(ticket, currentUser);
+
+        if (!isSeller && !isCompletedBuyer && !isOrganizer) {
+            throw new UnauthorizedException("У вас нет доступа к этим файлам билета");
+        }
+    }
+
+    private void ensureCanReadReissuedTicket(TicketLot ticket, User currentUser) {
+        if (ticket.getStatus() != TicketStatus.COMPLETED || !isBuyer(ticket, currentUser)) {
+            throw new UnauthorizedException("Новый билет доступен только покупателю после завершения сделки");
+        }
+    }
+
+    private boolean isBuyer(TicketLot ticket, User currentUser) {
+        return currentUser != null
                 && ticket.getBuyer() != null
                 && ticket.getBuyer().getId() != null
                 && ticket.getBuyer().getId().equals(currentUser.getId());
+    }
 
-        if (!isSeller && !isCompletedBuyer) {
-            throw new UnauthorizedException("У вас нет доступа к этим файлам билета");
-        }
+    private boolean isOrganizerForTicket(TicketLot ticket, User currentUser) {
+        return currentUser != null
+                && ticket.getOrganizer() != null
+                && ticket.getOrganizer().getContactEmail() != null
+                && ticket.getOrganizer().getContactEmail().equalsIgnoreCase(currentUser.getEmail());
     }
 
     private boolean isSeller(TicketLot ticket, User currentUser) {
@@ -481,9 +578,7 @@ public class TicketController {
     }
 
     private boolean isVisibleForPublic(TicketLot ticket) {
-        return ticket.getStatus() == TicketStatus.PENDING_RECIPIENT
-                || ticket.getStatus() == TicketStatus.PROCESSING
-                || ticket.getStatus() == TicketStatus.COMPLETED;
+        return ticket.getStatus() == TicketStatus.PENDING_RECIPIENT;
     }
 
     private boolean hasActiveHold(Long listingId) {
@@ -497,15 +592,30 @@ public class TicketController {
             return true;
         }
 
+        Organizer newOrganizer = resolveOrganizer(request);
+
+        if (organizerRepository == null) {
+            return !safeEquals(ticket.getUid(), request.uid())
+                    || !safeEquals(ticket.getEventName(), request.eventName())
+                    || !safeEquals(ticket.getEventDate(), request.eventDate())
+                    || !safeEquals(ticket.getVenueName(), newVenueParts.venueName())
+                    || !safeEquals(ticket.getVenueCity(), newVenueParts.venueCity())
+                    || !safeEquals(
+                    partnerOrganizerCodeMapper.normalizeOrganizerName(ticket.getOrganizerName()),
+                    partnerOrganizerCodeMapper.normalizeOrganizerName(request.organizerName())
+            )
+                    || !safeEquals(
+                    ticket.getEvent() == null ? null : ticket.getEvent().getEventId(),
+                    request.eventId()
+            );
+        }
+
         return !safeEquals(ticket.getUid(), request.uid())
                 || !safeEquals(ticket.getEventName(), request.eventName())
                 || !safeEquals(ticket.getEventDate(), request.eventDate())
                 || !safeEquals(ticket.getVenueName(), newVenueParts.venueName())
                 || !safeEquals(ticket.getVenueCity(), newVenueParts.venueCity())
-                || !safeEquals(
-                partnerOrganizerCodeMapper.normalizeOrganizerName(ticket.getOrganizerName()),
-                partnerOrganizerCodeMapper.normalizeOrganizerName(request.organizerName())
-        )
+                || !safeEquals(ticket.getOrganizer() == null ? null : ticket.getOrganizer().getId(), newOrganizer.getId())
                 || !safeEquals(
                 ticket.getEvent() == null ? null : ticket.getEvent().getEventId(),
                 request.eventId()
@@ -513,14 +623,16 @@ public class TicketController {
     }
 
     private void applyEditableFields(TicketLot ticket, CreateTicketRequest request, VenueParts venueParts) {
+        Organizer organizer = resolveOrganizer(request);
         ticket.setUid(request.uid());
         ticket.setEventName(request.eventName());
         ticket.setEventDate(request.eventDate());
         ticket.setVenueName(venueParts.venueName());
         ticket.setVenueCity(venueParts.venueCity());
         ticket.setAdditionalInfo(request.additionalInfo());
-        ticket.setOrganizerName(request.organizerName());
-        ticket.setEvent(resolveLinkedEvent(request));
+        ticket.setOrganizer(organizer);
+        ticket.setOrganizerName(organizer.getName());
+        ticket.setEvent(resolveLinkedEvent(request, organizer));
         ticket.setSellerComment(request.sellerComment());
         ticket.setOriginalPrice(request.price());
         ticket.setResalePrice(request.price());
@@ -545,6 +657,10 @@ public class TicketController {
     }
 
     private ListingDetailsResponse toDetailsResponse(TicketLot ticket) {
+        return toDetailsResponse(ticket, null);
+    }
+
+    private ListingDetailsResponse toDetailsResponse(TicketLot ticket, User viewer) {
         ListingDetailsResponse.SellerInfo sellerInfo = null;
         if (ticket.getSeller() != null) {
             String displayName = ticket.getSeller().getLogin();
@@ -564,7 +680,7 @@ public class TicketController {
                 ticket.getAdditionalInfo(),
                 ticket.getOrganizerName(),
                 ticket.getSellerComment(),
-                ticket.getReissuedTicketUid(),
+                isBuyer(ticket, viewer) ? ticket.getReissuedTicketUid() : null,
                 sellerInfo,
                 ticket.hasTicketFile(),
                 ticket.getTicketFilesCount()

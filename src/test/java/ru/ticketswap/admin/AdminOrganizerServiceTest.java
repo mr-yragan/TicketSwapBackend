@@ -93,7 +93,6 @@ class AdminOrganizerServiceTest {
 
         when(userIdentityService.normalizeEmail("organizer@example.com")).thenReturn("organizer@example.com");
         when(userIdentityService.findUserByEmail("organizer@example.com")).thenReturn(Optional.of(user));
-        when(organizerRepository.existsByApiKeyIgnoreCase("org3")).thenReturn(false);
         when(organizerRepository.existsByContactEmailIgnoreCase("organizer@example.com")).thenReturn(true);
 
         assertThrows(ConflictException.class, () -> service.createOrganizer(request));

@@ -37,6 +37,7 @@ import ru.ticketswap.venue.Venue;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThan;
@@ -98,9 +99,9 @@ class MockPartnerControllerTest {
 
     @BeforeEach
     void setUpOrganizerRepository() {
-        when(organizerRepository.existsByApiKeyIgnoreCase("org1")).thenReturn(true);
-        when(organizerRepository.existsByApiKeyIgnoreCase("org2")).thenReturn(true);
-        when(organizerRepository.existsByApiKeyIgnoreCase("org3")).thenReturn(false);
+        when(organizerRepository.findByApiKeyIgnoreCase("org1")).thenReturn(Optional.of(createOrganizer("org1")));
+        when(organizerRepository.findByApiKeyIgnoreCase("org2")).thenReturn(Optional.of(createOrganizer("org2")));
+        when(organizerRepository.findByApiKeyIgnoreCase("org3")).thenReturn(Optional.empty());
         when(eventRepository.findAllByOrganizerApiKeyIgnoreCaseOrderByStartsAtAscIdAsc("org1"))
                 .thenReturn(List.of(createEvent("1001", "org1")));
         when(eventRepository.findAllByOrganizerApiKeyIgnoreCaseOrderByStartsAtAscIdAsc("org2"))
@@ -137,7 +138,7 @@ class MockPartnerControllerTest {
 
     @Test
     void getCreatedOrganizerEventsReturns200Json() throws Exception {
-        when(organizerRepository.existsByApiKeyIgnoreCase("org3")).thenReturn(true);
+        when(organizerRepository.findByApiKeyIgnoreCase("org3")).thenReturn(Optional.of(createOrganizer("org3")));
         when(eventRepository.findAllByOrganizerApiKeyIgnoreCaseOrderByStartsAtAscIdAsc("org3"))
                 .thenReturn(List.of(createEvent("EVT-10001", "org3")));
 
@@ -162,6 +163,11 @@ class MockPartnerControllerTest {
                 .andExpect(jsonPath("$.ticketUid").value("TICKET-12345"))
                 .andExpect(jsonPath("$.organizerCode").value("org1"))
                 .andExpect(jsonPath("$.valid").exists());
+    }
+
+
+    private Organizer createOrganizer(String organizerCode) {
+        return new Organizer("Организатор " + organizerCode, organizerCode, organizerCode + "@example.com");
     }
 
     private Event createEvent(String eventId, String organizerCode) {
@@ -343,7 +349,7 @@ class MockPartnerControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.error").value("Некорректный запрос"))
-                .andExpect(jsonPath("$.message").value("Некорректный JSON в запросе"))
+                .andExpect(jsonPath("$.message").value("Некорректный JSON-запрос"))
                 .andExpect(jsonPath("$.status").value(400));
     }
 

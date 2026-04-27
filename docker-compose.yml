@@ -48,6 +48,7 @@ services:
       TICKETSWAP_STORAGE_S3_PUBLIC_ENDPOINT: http://localhost:9000
       SPRING_MAIL_HOST: mailpit
       SPRING_MAIL_PORT: 1025
+      TICKETSWAP_PARTNER_API_BASE_URL: http://127.0.0.1:8080
     ports:
       - "8080:8080"
 

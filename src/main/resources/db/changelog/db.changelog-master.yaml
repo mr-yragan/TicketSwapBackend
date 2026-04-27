@@ -153,3 +153,6 @@ databaseChangeLog:
   - include:
       file: changes/022-admin-user.yaml
       relativeToChangelogFile: true
+  - include:
+      file: changes/023-organizer-manual-workflow.yaml
+      relativeToChangelogFile: true

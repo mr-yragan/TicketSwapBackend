@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.RestController;
 import ru.ticketswap.event.EventRepository;
 import ru.ticketswap.organizer.dto.OrganizerDashboardResponse;
 import ru.ticketswap.organizer.dto.OrganizerProfileResponse;
+import ru.ticketswap.ticket.TicketRepository;
+import ru.ticketswap.ticket.TicketStatus;
 import ru.ticketswap.user.User;
 
 @RestController
@@ -17,10 +19,16 @@ public class OrganizerController {
 
     private final OrganizerLookupService organizerLookupService;
     private final EventRepository eventRepository;
+    private final TicketRepository ticketRepository;
 
-    public OrganizerController(OrganizerLookupService organizerLookupService, EventRepository eventRepository) {
+    public OrganizerController(
+            OrganizerLookupService organizerLookupService,
+            EventRepository eventRepository,
+            TicketRepository ticketRepository
+    ) {
         this.organizerLookupService = organizerLookupService;
         this.eventRepository = eventRepository;
+        this.ticketRepository = ticketRepository;
     }
 
     @GetMapping("/me")
@@ -43,7 +51,9 @@ public class OrganizerController {
                         organizer.getId(),
                         organizer.getName(),
                         organizer.getApiKey(),
-                        organizer.getContactEmail()
+                        organizer.getContactEmail(),
+                        organizer.getVerificationMode(),
+                        organizer.isBanned()
                 )
         ));
     }
@@ -54,14 +64,24 @@ public class OrganizerController {
     ) {
         Organizer organizer = organizerLookupService.requireOrganizerContext(principal).organizer();
         long eventsCount = eventRepository.countByOrganizerId(organizer.getId());
+        long pendingValidationCount = ticketRepository
+                .findAllByOrganizerIdAndStatusOrderByCreatedAtAsc(organizer.getId(), TicketStatus.PENDING_VALIDATION)
+                .size();
+        long pendingReissueCount = ticketRepository
+                .findAllByOrganizerIdAndStatusAndBuyerIsNotNullOrderByCreatedAtAsc(organizer.getId(), TicketStatus.PROCESSING)
+                .size();
 
         return ResponseEntity.ok(new OrganizerDashboardResponse(
                 organizer.getId(),
                 organizer.getName(),
                 organizer.getApiKey(),
                 organizer.getContactEmail(),
+                organizer.getVerificationMode(),
+                organizer.isBanned(),
                 eventsCount,
-                true
+                pendingValidationCount,
+                pendingReissueCount,
+                organizer.isExternalApi()
         ));
     }
 }

@@ -33,6 +33,8 @@ public record CreateTicketRequest(
         @Size(max = 2000, message = "Дополнительная информация должна быть не длиннее 2000 символов")
         String additionalInfo,
 
+        Long organizerId,
+
         @Size(max = 255, message = "Название организатора должно быть не длиннее 255 символов")
         String organizerName,
 
@@ -51,8 +53,22 @@ public record CreateTicketRequest(
             BigDecimal price,
             String additionalInfo,
             String organizerName,
+            String eventId,
             String sellerComment
     ) {
-        this(uid, eventName, eventDate, venue, price, additionalInfo, organizerName, null, sellerComment);
+        this(uid, eventName, eventDate, venue, price, additionalInfo, null, organizerName, eventId, sellerComment);
+    }
+
+    public CreateTicketRequest(
+            String uid,
+            String eventName,
+            LocalDateTime eventDate,
+            String venue,
+            BigDecimal price,
+            String additionalInfo,
+            String organizerName,
+            String sellerComment
+    ) {
+        this(uid, eventName, eventDate, venue, price, additionalInfo, null, organizerName, null, sellerComment);
     }
 }

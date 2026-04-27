@@ -5,6 +5,7 @@ import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 import io.minio.http.Method;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -14,6 +15,7 @@ import ru.ticketswap.config.TicketSwapProperties;
 import ru.ticketswap.ticket.TicketFile;
 import ru.ticketswap.ticket.TicketFileRepository;
 import ru.ticketswap.ticket.TicketLot;
+import ru.ticketswap.ticket.TicketRepository;
 import ru.ticketswap.ticket.dto.TicketFileDownloadUrlResponse;
 import ru.ticketswap.ticket.dto.TicketFileResponse;
 import ru.ticketswap.ticket.dto.TicketFilesResponse;
@@ -41,18 +43,32 @@ public class TicketFileStorageService {
     private final MinioClient minioClient;
     private final MinioClient presignMinioClient;
     private final TicketFileRepository ticketFileRepository;
+    private final TicketRepository ticketRepository;
     private final TicketSwapProperties.Storage.S3 properties;
 
+    
+    @Autowired
     public TicketFileStorageService(
             @Qualifier("internalMinioClient") MinioClient minioClient,
             @Qualifier("publicPresignMinioClient") MinioClient presignMinioClient,
             TicketFileRepository ticketFileRepository,
+            TicketRepository ticketRepository,
             TicketSwapProperties ticketSwapProperties
     ) {
         this.minioClient = minioClient;
         this.presignMinioClient = presignMinioClient;
         this.ticketFileRepository = ticketFileRepository;
+        this.ticketRepository = ticketRepository;
         this.properties = ticketSwapProperties.getStorage().getS3();
+    }
+
+    TicketFileStorageService(
+            MinioClient minioClient,
+            MinioClient presignMinioClient,
+            TicketFileRepository ticketFileRepository,
+            TicketSwapProperties ticketSwapProperties
+    ) {
+        this(minioClient, presignMinioClient, ticketFileRepository, null, ticketSwapProperties);
     }
 
     public TicketFilesResponse uploadTicketFiles(TicketLot ticket, List<MultipartFile> files) {
@@ -88,6 +104,53 @@ public class TicketFileStorageService {
             uploadedObjectKeys.forEach(this::deleteObjectQuietly);
             throw ex;
         }
+    }
+
+    public TicketFileDownloadUrlResponse uploadReissuedTicketFile(TicketLot ticket, MultipartFile file) {
+        validate(file);
+        String objectKey = buildReissuedObjectKey(ticket.getId(), file.getOriginalFilename());
+        String previousObjectKey = ticket.getReissuedFileObjectKey();
+
+        try {
+            uploadObject(objectKey, file);
+            ticket.setReissuedFileObjectKey(objectKey);
+            ticket.setReissuedFileOriginalName(safeOriginalName(file));
+            ticket.setReissuedFileContentType(resolveContentType(file));
+            ticket.setReissuedFileSizeBytes(file.getSize());
+            ticket.setReissuedFileUploadedAt(Instant.now());
+            ticketRepository.saveAndFlush(ticket);
+            deleteObjectQuietly(previousObjectKey);
+            return createReissuedTicketDownloadUrl(ticket);
+        } catch (RuntimeException ex) {
+            deleteObjectQuietly(objectKey);
+            throw ex;
+        }
+    }
+
+    public TicketFileDownloadUrlResponse createReissuedTicketDownloadUrl(TicketLot ticket) {
+        if (ticket.getReissuedFileObjectKey() == null || ticket.getReissuedFileObjectKey().isBlank()) {
+            throw new NotFoundException("Новый файл билета ещё не загружен");
+        }
+        return createDownloadUrl(
+                null,
+                ticket.getReissuedFileObjectKey(),
+                ticket.getReissuedFileOriginalName(),
+                ticket.getReissuedFileContentType(),
+                ticket.getReissuedFileSizeBytes()
+        );
+    }
+
+    public void deleteReissuedTicketFileQuietly(TicketLot ticket) {
+        if (ticket == null || ticket.getReissuedFileObjectKey() == null) {
+            return;
+        }
+        deleteObjectQuietly(ticket.getReissuedFileObjectKey());
+        ticket.setReissuedFileObjectKey(null);
+        ticket.setReissuedFileOriginalName(null);
+        ticket.setReissuedFileContentType(null);
+        ticket.setReissuedFileSizeBytes(null);
+        ticket.setReissuedFileUploadedAt(null);
+        ticketRepository.saveAndFlush(ticket);
     }
 
     public TicketFilesResponse listFiles(TicketLot ticket) {
@@ -136,6 +199,7 @@ public class TicketFileStorageService {
             return;
         }
         deleteAllTicketFiles(ticket);
+        deleteReissuedTicketFileQuietly(ticket);
     }
 
     private TicketFile loadTicketFile(TicketLot ticket, Long fileId) {
@@ -144,24 +208,40 @@ public class TicketFileStorageService {
     }
 
     private TicketFileDownloadUrlResponse createDownloadUrl(TicketFile ticketFile) {
+        return createDownloadUrl(
+                ticketFile.getId(),
+                ticketFile.getObjectKey(),
+                ticketFile.getOriginalName(),
+                ticketFile.getContentType(),
+                ticketFile.getSizeBytes()
+        );
+    }
+
+    private TicketFileDownloadUrlResponse createDownloadUrl(
+            Long fileId,
+            String objectKey,
+            String originalName,
+            String contentType,
+            Long sizeBytes
+    ) {
         try {
             String generatedUrl = presignMinioClient.getPresignedObjectUrl(
                     GetPresignedObjectUrlArgs.builder()
                             .method(Method.GET)
                             .bucket(properties.getBucket())
-                            .object(ticketFile.getObjectKey())
+                            .object(objectKey)
                             .expiry(properties.getPresignedGetExpiryMinutes(), TimeUnit.MINUTES)
                             .build()
             );
 
             Instant expiresAt = Instant.now().plusSeconds(properties.getPresignedGetExpiryMinutes() * 60L);
             return new TicketFileDownloadUrlResponse(
-                    ticketFile.getId(),
+                    fileId,
                     generatedUrl,
                     expiresAt,
-                    ticketFile.getOriginalName(),
-                    ticketFile.getContentType(),
-                    ticketFile.getSizeBytes()
+                    originalName,
+                    contentType,
+                    sizeBytes
             );
         } catch (Exception ex) {
             throw new TicketFileStorageException("Не удалось создать ссылку для скачивания файла билета", ex);
@@ -213,6 +293,11 @@ public class TicketFileStorageService {
         return "tickets/%d/%s%s".formatted(ticketId, UUID.randomUUID(), extension);
     }
 
+    private String buildReissuedObjectKey(Long ticketId, String originalFilename) {
+        String extension = extractExtension(originalFilename);
+        return "tickets/%d/reissued/%s%s".formatted(ticketId, UUID.randomUUID(), extension);
+    }
+
     private String safeOriginalName(MultipartFile file) {
         String originalName = file.getOriginalFilename();
         if (originalName == null || originalName.isBlank()) {
@@ -262,6 +347,9 @@ public class TicketFileStorageService {
     }
 
     private void deleteObjectQuietly(String objectKey) {
+        if (objectKey == null || objectKey.isBlank()) {
+            return;
+        }
         try {
             minioClient.removeObject(
                     RemoveObjectArgs.builder()
