@@ -26,6 +26,8 @@ import ru.ticketswap.organizer.Organizer;
 import ru.ticketswap.organizer.OrganizerRepository;
 import ru.ticketswap.partner.PartnerOrganizerCodeMapper;
 import ru.ticketswap.purchase.PurchaseService;
+import ru.ticketswap.purchase.PurchaseOrderRepository;
+import ru.ticketswap.purchase.PurchaseOrderStatus;
 import ru.ticketswap.storage.TicketFileStorageService;
 import ru.ticketswap.ticket.history.ListingStatusHistoryService;
 import ru.ticketswap.ticket.dto.CreateTicketRequest;
@@ -59,6 +61,7 @@ public class TicketController {
     private final UserRepository userRepository;
     private final ListingHoldRepository listingHoldRepository;
     private final PurchaseService purchaseService;
+    private final PurchaseOrderRepository purchaseOrderRepository;
     private final ListingLifecycleService listingLifecycleService;
     private final ListingWriteService listingWriteService;
     private final PartnerOrganizerCodeMapper partnerOrganizerCodeMapper;
@@ -73,6 +76,7 @@ public class TicketController {
             UserRepository userRepository,
             ListingHoldRepository listingHoldRepository,
             PurchaseService purchaseService,
+            PurchaseOrderRepository purchaseOrderRepository,
             ListingLifecycleService listingLifecycleService,
             ListingWriteService listingWriteService,
             PartnerOrganizerCodeMapper partnerOrganizerCodeMapper,
@@ -85,6 +89,7 @@ public class TicketController {
         this.userRepository = userRepository;
         this.listingHoldRepository = listingHoldRepository;
         this.purchaseService = purchaseService;
+        this.purchaseOrderRepository = purchaseOrderRepository;
         this.listingLifecycleService = listingLifecycleService;
         this.listingWriteService = listingWriteService;
         this.partnerOrganizerCodeMapper = partnerOrganizerCodeMapper;
@@ -111,6 +116,7 @@ public class TicketController {
                 userRepository,
                 listingHoldRepository,
                 purchaseService,
+                null,
                 listingLifecycleService,
                 listingWriteService,
                 partnerOrganizerCodeMapper,
@@ -294,7 +300,7 @@ public class TicketController {
         ensureSellerCanModifyListing(ticket, seller);
 
         ResolvedListingInput resolved = resolveListingInput(request);
-        boolean requiresRevalidation = requiresRevalidation(ticket, request, resolved);
+        boolean requiresRevalidation = requiresRevalidation(ticket, request, resolved.venueParts());
 
         if (requiresRevalidation && !ticket.hasTicketFile()) {
             throw new BusinessRuleException("Нельзя отправить объявление на проверку без файла билета");
@@ -533,16 +539,30 @@ public class TicketController {
             );
         }
 
-        validateManualEventFields(request);
-        VenueParts venueParts = parseVenueParts(request.venue());
         Organizer organizer = resolveOrganizer(request);
         Event linkedEvent = resolveLinkedEvent(request, organizer);
+        if (organizer.isExternalApi() && linkedEvent == null) {
+            throw new BusinessRuleException("Для внешнего организатора нужно выбрать мероприятие из каталога или передать eventId");
+        }
+        if (linkedEvent != null) {
+            VenueParts venueParts = new VenueParts(linkedEvent.getVenue().getName(), linkedEvent.getVenue().getAddress());
+            return new ResolvedListingInput(
+                    linkedEvent.getName(),
+                    linkedEvent.getStartsAt().atZone(ZoneId.of(linkedEvent.getVenue().getTimezone())).toLocalDateTime(),
+                    venueParts,
+                    organizer,
+                    linkedEvent
+            );
+        }
+
+        validateManualEventFields(request);
+        VenueParts venueParts = parseVenueParts(request.venue());
         return new ResolvedListingInput(
                 request.eventName().trim(),
                 request.eventDate(),
                 venueParts,
                 organizer,
-                linkedEvent
+                null
         );
     }
 
@@ -584,7 +604,7 @@ public class TicketController {
         }
 
         String normalized = organizerName.trim();
-        Organizer organizer = organizerRepository.findByApiKeyIgnoreCase(normalized)
+        Organizer organizer = organizerRepository.findByOrganizerCodeIgnoreCase(normalized)
                 .or(() -> organizerRepository.findByNameIgnoreCase(normalized))
                 .orElseThrow(() -> new BusinessRuleException("Организатор не зарегистрирован"));
         ensureOrganizerCanAcceptListings(organizer);
@@ -651,6 +671,10 @@ public class TicketController {
 
         if (hasActiveHold(ticket.getId())) {
             throw new BusinessRuleException("Объявление нельзя изменить, пока оно зарезервировано покупателем");
+        }
+
+        if (hasRefundRequiredOrder(ticket.getId())) {
+            throw new BusinessRuleException("Объявление нельзя повторно выставить, пока по предыдущей покупке требуется возврат");
         }
     }
 
@@ -732,6 +756,11 @@ public class TicketController {
 
     private boolean canSeePrivateListingFields(TicketLot ticket, User viewer) {
         return isAdmin(viewer) || isSeller(ticket, viewer) || isBuyer(ticket, viewer) || isOrganizerForTicket(ticket, viewer);
+    }
+
+    private boolean hasRefundRequiredOrder(Long listingId) {
+        return purchaseOrderRepository != null
+                && !purchaseOrderRepository.findAllByListingIdAndStatusIn(listingId, List.of(PurchaseOrderStatus.REFUND_REQUIRED)).isEmpty();
     }
 
     private boolean hasActiveHold(Long listingId) {

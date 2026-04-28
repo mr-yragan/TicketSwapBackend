@@ -1,0 +1,5 @@
+server:
+  port: ${SERVER_PORT:8081}
+
+partner-mock:
+  internal-token: ${PARTNER_MOCK_INTERNAL_TOKEN:}

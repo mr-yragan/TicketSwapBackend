@@ -50,14 +50,21 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/mock/partners/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/organizers").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/events/search").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/organizer/**").hasRole("ORGANIZER")
                         .requestMatchers(HttpMethod.GET, "/api/tickets/*/status-history").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/tickets/my").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/tickets/*/file", "/api/tickets/*/file/**", "/api/tickets/*/files", "/api/tickets/*/files/**", "/api/tickets/*/reissued-file", "/api/tickets/*/reissued-file/**").authenticated()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/tickets/*/file",
+                                "/api/tickets/*/file/**",
+                                "/api/tickets/*/files",
+                                "/api/tickets/*/files/**",
+                                "/api/tickets/*/reissued-file",
+                                "/api/tickets/*/reissued-file/**"
+                        ).authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/tickets/**").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/tickets/**").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/tickets/**").authenticated()
@@ -83,7 +90,14 @@ public class SecurityConfig {
         }
         config.setAllowedOrigins(allowedOrigins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
+        config.setAllowedHeaders(List.of(
+                "Authorization",
+                "Content-Type",
+                "Accept",
+                "Idempotency-Key",
+                "X-Partner-Internal-Token",
+                "X-Payment-Internal-Token"
+        ));
         config.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

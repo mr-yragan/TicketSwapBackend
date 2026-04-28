@@ -42,6 +42,24 @@ services:
       timeout: 5s
       retries: 12
 
+  partner-mock:
+    build: ./partner-mock
+    container_name: ticketswap-partner-mock
+    environment:
+      SERVER_PORT: 8081
+      PARTNER_MOCK_INTERNAL_TOKEN: ${TICKETSWAP_PARTNER_API_INTERNAL_TOKEN:?Set TICKETSWAP_PARTNER_API_INTERNAL_TOKEN in .env}
+    ports:
+      - "8081:8081"
+
+  payment-mock:
+    build: ./payment-mock
+    container_name: ticketswap-payment-mock
+    environment:
+      SERVER_PORT: 8082
+      PAYMENT_MOCK_INTERNAL_TOKEN: ${TICKETSWAP_PAYMENT_API_INTERNAL_TOKEN:?Set TICKETSWAP_PAYMENT_API_INTERNAL_TOKEN in .env}
+    ports:
+      - "8082:8082"
+
   backend:
     build: .
     container_name: ticketswap-backend
@@ -54,6 +72,10 @@ services:
         condition: service_started
       elasticsearch:
         condition: service_healthy
+      partner-mock:
+        condition: service_started
+      payment-mock:
+        condition: service_started
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ticketswap
       SPRING_DATASOURCE_USERNAME: ticketswap
@@ -67,9 +89,10 @@ services:
       TICKETSWAP_STORAGE_S3_PUBLIC_ENDPOINT: http://localhost:9000
       SPRING_MAIL_HOST: mailpit
       SPRING_MAIL_PORT: 1025
-      TICKETSWAP_PARTNER_API_BASE_URL: http://127.0.0.1:8080
-      TICKETSWAP_MOCK_PARTNER_ENABLED: ${TICKETSWAP_MOCK_PARTNER_ENABLED:-true}
-      TICKETSWAP_MOCK_PARTNER_INTERNAL_TOKEN: ${TICKETSWAP_MOCK_PARTNER_INTERNAL_TOKEN:?Set TICKETSWAP_MOCK_PARTNER_INTERNAL_TOKEN in .env}
+      TICKETSWAP_PARTNER_API_BASE_URL: http://partner-mock:8081
+      TICKETSWAP_PARTNER_API_INTERNAL_TOKEN: ${TICKETSWAP_PARTNER_API_INTERNAL_TOKEN:?Set TICKETSWAP_PARTNER_API_INTERNAL_TOKEN in .env}
+      TICKETSWAP_PAYMENT_API_BASE_URL: http://payment-mock:8082
+      TICKETSWAP_PAYMENT_API_INTERNAL_TOKEN: ${TICKETSWAP_PAYMENT_API_INTERNAL_TOKEN:?Set TICKETSWAP_PAYMENT_API_INTERNAL_TOKEN in .env}
       TICKETSWAP_BOOTSTRAP_ADMIN_ENABLED: ${TICKETSWAP_BOOTSTRAP_ADMIN_ENABLED:-false}
       TICKETSWAP_BOOTSTRAP_ADMIN_EMAIL: ${TICKETSWAP_BOOTSTRAP_ADMIN_EMAIL:-}
       TICKETSWAP_BOOTSTRAP_ADMIN_LOGIN: ${TICKETSWAP_BOOTSTRAP_ADMIN_LOGIN:-}

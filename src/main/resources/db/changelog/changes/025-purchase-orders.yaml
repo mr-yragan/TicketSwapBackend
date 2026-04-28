@@ -62,6 +62,9 @@ databaseChangeLog:
                   name: partner_operation_id
                   type: varchar(255)
               - column:
+                  name: payment_operation_id
+                  type: varchar(255)
+              - column:
                   name: failure_reason
                   type: varchar(2000)
               - column:
@@ -78,6 +81,9 @@ databaseChangeLog:
                     nullable: false
               - column:
                   name: completed_at
+                  type: timestamp with time zone
+              - column:
+                  name: refunded_at
                   type: timestamp with time zone
         - createIndex:
             indexName: idx_purchase_orders_listing

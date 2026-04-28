@@ -1,0 +1,102 @@
+databaseChangeLog:
+  - changeSet:
+      id: 026-create-audit-logs-and-notification-outbox
+      author: openai
+      changes:
+        - createTable:
+            tableName: audit_logs
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: actor_user_id
+                  type: bigint
+              - column:
+                  name: action
+                  type: varchar(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: entity_type
+                  type: varchar(128)
+              - column:
+                  name: entity_id
+                  type: bigint
+              - column:
+                  name: details
+                  type: varchar(2000)
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: audit_logs
+            indexName: idx_audit_logs_created_at
+            columns:
+              - column:
+                  name: created_at
+              - column:
+                  name: id
+        - createTable:
+            tableName: notification_outbox
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: recipient_email
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: type
+                  type: varchar(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: subject
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: payload
+                  type: varchar(4000)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: varchar(32)
+                  defaultValue: PENDING
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp with time zone
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: notification_outbox
+            indexName: idx_notification_outbox_status_created
+            columns:
+              - column:
+                  name: status
+              - column:
+                  name: created_at

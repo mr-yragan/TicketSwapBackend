@@ -4,7 +4,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import ru.ticketswap.common.BusinessRuleException;
+import ru.ticketswap.audit.AuditLogService;
 import ru.ticketswap.common.NotFoundException;
+import ru.ticketswap.notification.NotificationOutboxService;
+import ru.ticketswap.payment.PaymentCaptureResponse;
+import ru.ticketswap.payment.PaymentGatewayClient;
+import ru.ticketswap.payment.PaymentIntegrationException;
 import ru.ticketswap.hold.ListingHoldRepository;
 import ru.ticketswap.organizer.Organizer;
 import ru.ticketswap.organizer.OrganizerVerificationMode;
@@ -36,19 +41,28 @@ public class ManualOrganizerWorkflowService {
     private final ListingHoldRepository listingHoldRepository;
     private final TicketFileStorageService ticketFileStorageService;
     private final PurchaseOrderRepository purchaseOrderRepository;
+    private final PaymentGatewayClient paymentGatewayClient;
+    private final AuditLogService auditLogService;
+    private final NotificationOutboxService notificationOutboxService;
 
     public ManualOrganizerWorkflowService(
             TicketRepository ticketRepository,
             ListingStatusHistoryService listingStatusHistoryService,
             ListingHoldRepository listingHoldRepository,
             TicketFileStorageService ticketFileStorageService,
-            PurchaseOrderRepository purchaseOrderRepository
+            PurchaseOrderRepository purchaseOrderRepository,
+            PaymentGatewayClient paymentGatewayClient,
+            AuditLogService auditLogService,
+            NotificationOutboxService notificationOutboxService
     ) {
         this.ticketRepository = ticketRepository;
         this.listingStatusHistoryService = listingStatusHistoryService;
         this.listingHoldRepository = listingHoldRepository;
         this.ticketFileStorageService = ticketFileStorageService;
         this.purchaseOrderRepository = purchaseOrderRepository;
+        this.paymentGatewayClient = paymentGatewayClient;
+        this.auditLogService = auditLogService;
+        this.notificationOutboxService = notificationOutboxService;
     }
 
     public List<TicketLot> listPendingValidation(Organizer organizer) {
@@ -151,12 +165,34 @@ public class ManualOrganizerWorkflowService {
                 listingId,
                 List.of(PurchaseOrderStatus.CREATED, PurchaseOrderStatus.PAYMENT_AUTHORIZED, PurchaseOrderStatus.PROCESSING_REISSUE, PurchaseOrderStatus.WAITING_MANUAL_REISSUE)
         )) {
-            order.setStatus(PurchaseOrderStatus.COMPLETED);
-            order.setPaymentStatus(PaymentStatus.CAPTURED);
-            order.setCompletedAt(java.time.Instant.now());
+            PaymentCaptureResponse capture = capturePayment(order);
+            if (!capture.captured()) {
+                order.setStatus(PurchaseOrderStatus.REFUND_REQUIRED);
+                order.setPaymentStatus(PaymentStatus.REFUND_REQUIRED);
+                order.setFailureReason("Платёж не захвачен после ручного перевыпуска: " + failureReason(capture.reason()));
+            } else {
+                order.setStatus(PurchaseOrderStatus.COMPLETED);
+                order.setPaymentStatus(PaymentStatus.CAPTURED);
+                order.setCompletedAt(java.time.Instant.now());
+            }
             purchaseOrderRepository.save(order);
         }
         purchaseOrderRepository.flush();
+    }
+
+    private PaymentCaptureResponse capturePayment(PurchaseOrder order) {
+        try {
+            return paymentGatewayClient.capture(order.getPaymentOperationId());
+        } catch (PaymentIntegrationException ex) {
+            return new PaymentCaptureResponse(false, order.getPaymentOperationId(), "платёжный сервис недоступен");
+        }
+    }
+
+    private String failureReason(String reason) {
+        if (reason == null || reason.isBlank()) {
+            return "причина неизвестна";
+        }
+        return reason.trim();
     }
 
     private void markActiveOrdersRefundRequired(Long listingId, String failureReason) {

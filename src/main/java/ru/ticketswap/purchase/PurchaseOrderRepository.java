@@ -2,6 +2,8 @@ package ru.ticketswap.purchase;
 
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
@@ -20,4 +22,8 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
 
     @EntityGraph(attributePaths = {"listing", "buyer", "seller"})
     List<PurchaseOrder> findAllByOrderByCreatedAtDesc();
+
+    @EntityGraph(attributePaths = {"listing", "buyer", "seller"})
+    @Query("select po from PurchaseOrder po where po.id = :id")
+    Optional<PurchaseOrder> findWithPartiesById(@Param("id") Long id);
 }

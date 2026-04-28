@@ -9,13 +9,13 @@ public interface OrganizerRepository extends JpaRepository<Organizer, Long> {
 
     Optional<Organizer> findByContactEmailIgnoreCase(String contactEmail);
 
-    Optional<Organizer> findByApiKeyIgnoreCase(String apiKey);
+    Optional<Organizer> findByOrganizerCodeIgnoreCase(String organizerCode);
 
     Optional<Organizer> findByNameIgnoreCase(String name);
 
     List<Organizer> findAllByBannedFalseOrderByNameAscIdAsc();
 
-    boolean existsByApiKeyIgnoreCase(String apiKey);
+    boolean existsByOrganizerCodeIgnoreCase(String organizerCode);
 
     boolean existsByContactEmailIgnoreCase(String contactEmail);
 

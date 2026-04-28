@@ -94,8 +94,7 @@ public interface TicketRepository extends JpaRepository<TicketLot, Long>, JpaSpe
                         criteriaBuilder.like(criteriaBuilder.lower(root.<String>get("venueName")), pattern),
                         criteriaBuilder.like(criteriaBuilder.lower(root.<String>get("venueCity")), pattern),
                         criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.coalesce(root.<String>get("organizerName"), "")), pattern),
-                        criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.coalesce(root.<String>get("additionalInfo"), "")), pattern),
-                        criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.coalesce(root.<String>get("sellerComment"), "")), pattern)
+                        criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.coalesce(root.<String>get("additionalInfo"), "")), pattern)
                 ));
             }
 

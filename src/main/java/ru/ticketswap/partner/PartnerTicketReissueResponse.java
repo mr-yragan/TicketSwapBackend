@@ -5,6 +5,8 @@ public record PartnerTicketReissueResponse(
         String originalTicketUid,
         String newTicketUid,
         String organizerCode,
+        String eventId,
+        String operationId,
         String reason
 ) {
 }

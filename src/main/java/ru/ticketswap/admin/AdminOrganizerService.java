@@ -1,15 +1,18 @@
 package ru.ticketswap.admin;
 
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.ticketswap.admin.dto.CreateOrganizerRequest;
+import ru.ticketswap.audit.AuditLogService;
 import ru.ticketswap.common.BusinessRuleException;
 import ru.ticketswap.common.ConflictException;
 import ru.ticketswap.common.NotFoundException;
+import ru.ticketswap.hold.ListingHoldRepository;
+import ru.ticketswap.notification.NotificationOutboxService;
 import ru.ticketswap.organizer.Organizer;
 import ru.ticketswap.organizer.OrganizerRepository;
 import ru.ticketswap.organizer.OrganizerVerificationMode;
-import ru.ticketswap.hold.ListingHoldRepository;
 import ru.ticketswap.purchase.PaymentStatus;
 import ru.ticketswap.purchase.PurchaseOrder;
 import ru.ticketswap.purchase.PurchaseOrderRepository;
@@ -22,6 +25,9 @@ import ru.ticketswap.user.User;
 import ru.ticketswap.user.UserIdentityService;
 import ru.ticketswap.user.UserRepository;
 
+import java.security.SecureRandom;
+import java.time.Instant;
+import java.util.Base64;
 import java.util.List;
 
 @Service
@@ -36,6 +42,10 @@ public class AdminOrganizerService {
     private final ListingHoldRepository listingHoldRepository;
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final ListingStatusHistoryService listingStatusHistoryService;
+    private final PasswordEncoder passwordEncoder;
+    private final AuditLogService auditLogService;
+    private final NotificationOutboxService notificationOutboxService;
+    private final SecureRandom secureRandom = new SecureRandom();
 
     public AdminOrganizerService(
             OrganizerRepository organizerRepository,
@@ -44,7 +54,10 @@ public class AdminOrganizerService {
             TicketRepository ticketRepository,
             ListingHoldRepository listingHoldRepository,
             PurchaseOrderRepository purchaseOrderRepository,
-            ListingStatusHistoryService listingStatusHistoryService
+            ListingStatusHistoryService listingStatusHistoryService,
+            PasswordEncoder passwordEncoder,
+            AuditLogService auditLogService,
+            NotificationOutboxService notificationOutboxService
     ) {
         this.organizerRepository = organizerRepository;
         this.userRepository = userRepository;
@@ -53,6 +66,9 @@ public class AdminOrganizerService {
         this.listingHoldRepository = listingHoldRepository;
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.listingStatusHistoryService = listingStatusHistoryService;
+        this.passwordEncoder = passwordEncoder;
+        this.auditLogService = auditLogService;
+        this.notificationOutboxService = notificationOutboxService;
     }
 
     public List<Organizer> listOrganizers() {
@@ -60,13 +76,20 @@ public class AdminOrganizerService {
     }
 
     @Transactional
-    public Organizer createOrganizer(CreateOrganizerRequest request) {
-        String name = request.name().trim();
-        String apiKey = normalizeApiKey(request.apiKey());
+    public OrganizerCreationResult createOrganizer(CreateOrganizerRequest request, User actor) {
+        String name = requiredTrim(request.name(), "Название обязательно");
+        String organizerCode = normalizeOrganizerCode(request.organizerCode());
+        if (organizerCode == null) {
+            organizerCode = normalizeOrganizerCode(request.apiKey());
+        }
         String contactEmail = userIdentityService.normalizeEmail(request.contactEmail());
         OrganizerVerificationMode verificationMode = request.verificationMode() == null
                 ? OrganizerVerificationMode.EXTERNAL_API
                 : request.verificationMode();
+
+        if (organizerCode == null) {
+            throw new BusinessRuleException("Код организатора обязателен");
+        }
 
         User user = userIdentityService.findUserByEmail(contactEmail)
                 .orElseThrow(() -> new NotFoundException("Пользователь с такой контактной почтой не найден"));
@@ -79,44 +102,54 @@ public class AdminOrganizerService {
             throw new ConflictException("Организатор с такой контактной почтой уже существует");
         }
 
-        if (verificationMode == OrganizerVerificationMode.EXTERNAL_API) {
-            if (apiKey == null) {
-                throw new BusinessRuleException("Для верифицированного организатора нужен API-ключ");
-            }
-            if (organizerRepository.existsByApiKeyIgnoreCase(apiKey)) {
-                throw new ConflictException("Организатор с таким API-ключом уже существует");
-            }
-        } else {
-            if (apiKey != null && organizerRepository.existsByApiKeyIgnoreCase(apiKey)) {
-                throw new ConflictException("Организатор с таким API-ключом уже существует");
-            }
+        if (organizerRepository.existsByOrganizerCodeIgnoreCase(organizerCode)) {
+            throw new ConflictException("Организатор с таким кодом уже существует");
         }
 
-        Organizer organizer = organizerRepository.save(new Organizer(name, apiKey, contactEmail, verificationMode));
+        String generatedSecret = null;
+        Organizer organizer = new Organizer(name, organizerCode, contactEmail, verificationMode);
+        if (verificationMode == OrganizerVerificationMode.EXTERNAL_API) {
+            String secret = request.integrationSecret();
+            if (secret == null || secret.isBlank()) {
+                secret = generateSecret();
+                generatedSecret = secret;
+            }
+            organizer.setApiKeyHash(passwordEncoder.encode(secret));
+            organizer.setApiKeyLast4(last4(secret));
+            organizer.setApiKeyCreatedAt(Instant.now());
+        }
+
+        Organizer saved = organizerRepository.save(organizer);
         user.setRole(ORGANIZER_ROLE);
         user.incrementTokenVersion();
         userRepository.save(user);
 
-        return organizer;
+        auditLogService.record(actor, "ORGANIZER_CREATED", "ORGANIZER", saved.getId(), "code=" + saved.getOrganizerCode());
+        notificationOutboxService.enqueue(contactEmail, "ORGANIZER_CREATED", "Профиль организатора создан", "Организатор: " + name);
+
+        return new OrganizerCreationResult(saved, generatedSecret);
     }
 
     @Transactional
-    public Organizer banOrganizer(Long id) {
+    public Organizer banOrganizer(Long id, User actor) {
         Organizer organizer = loadOrganizer(id);
         organizer.setBanned(true);
         Organizer saved = organizerRepository.save(organizer);
         suspendActiveListingsForBannedOrganizer(saved);
+        auditLogService.record(actor, "ORGANIZER_BANNED", "ORGANIZER", saved.getId(), saved.getOrganizerCode());
+        notificationOutboxService.enqueue(saved.getContactEmail(), "ORGANIZER_BANNED", "Организатор заблокирован", "Организатор: " + saved.getName());
         return saved;
     }
 
     @Transactional
-    public Organizer unbanOrganizer(Long id) {
+    public Organizer unbanOrganizer(Long id, User actor) {
         Organizer organizer = loadOrganizer(id);
         organizer.setBanned(false);
-        return organizerRepository.save(organizer);
+        Organizer saved = organizerRepository.save(organizer);
+        auditLogService.record(actor, "ORGANIZER_UNBANNED", "ORGANIZER", saved.getId(), saved.getOrganizerCode());
+        notificationOutboxService.enqueue(saved.getContactEmail(), "ORGANIZER_UNBANNED", "Организатор разблокирован", "Организатор: " + saved.getName());
+        return saved;
     }
-
-
 
     private void suspendActiveListingsForBannedOrganizer(Organizer organizer) {
         for (TicketStatus status : List.of(
@@ -151,20 +184,43 @@ public class AdminOrganizerService {
             order.setPaymentStatus(PaymentStatus.REFUND_REQUIRED);
             order.setFailureReason(reason);
             purchaseOrderRepository.save(order);
+            notificationOutboxService.enqueue(order.getBuyer().getEmail(), "REFUND_REQUIRED", "Требуется возврат платежа", reason);
         }
         purchaseOrderRepository.flush();
     }
-
 
     private Organizer loadOrganizer(Long id) {
         return organizerRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Организатор не найден"));
     }
 
-    private String normalizeApiKey(String apiKey) {
-        if (apiKey == null || apiKey.isBlank()) {
+    private String normalizeOrganizerCode(String value) {
+        if (value == null || value.isBlank()) {
             return null;
         }
-        return apiKey.trim();
+        return value.trim();
+    }
+
+    private String requiredTrim(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessRuleException(message);
+        }
+        return value.trim();
+    }
+
+    private String generateSecret() {
+        byte[] bytes = new byte[48];
+        secureRandom.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private String last4(String value) {
+        if (value == null || value.length() <= 4) {
+            return value;
+        }
+        return value.substring(value.length() - 4);
+    }
+
+    public record OrganizerCreationResult(Organizer organizer, String generatedIntegrationSecret) {
     }
 }

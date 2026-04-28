@@ -1,0 +1,5 @@
+server:
+  port: ${SERVER_PORT:8082}
+
+payment-mock:
+  internal-token: ${PAYMENT_MOCK_INTERNAL_TOKEN:}

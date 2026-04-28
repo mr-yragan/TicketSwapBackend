@@ -28,7 +28,7 @@ public record OrganizerEventResponse(
                 event.getStartsAt(),
                 event.getDate(),
                 includeOrganizer
-                        ? new OrganizerInfo(organizer.getId(), organizer.getName(), organizer.getApiKey())
+                        ? new OrganizerInfo(organizer.getId(), organizer.getName(), organizer.getOrganizerCode())
                         : null,
                 new VenueInfo(venue.getId(), venue.getName(), venue.getAddress(), venue.getTimezone())
         );
@@ -37,7 +37,7 @@ public record OrganizerEventResponse(
     public record OrganizerInfo(
             Long id,
             String name,
-            String apiKey
+            String organizerCode
     ) {
     }
 

@@ -1,28 +1,31 @@
 package ru.ticketswap.organizer.dto;
 
+import ru.ticketswap.organizer.Organizer;
 import ru.ticketswap.organizer.OrganizerVerificationMode;
 
+import java.time.Instant;
+
 public record OrganizerProfileResponse(
-        UserInfo user,
-        OrganizerInfo organizer
+        Long id,
+        String name,
+        String organizerCode,
+        String contactEmail,
+        OrganizerVerificationMode verificationMode,
+        boolean banned,
+        String apiKeyLast4,
+        Instant apiKeyCreatedAt
 ) {
 
-    public record UserInfo(
-            Long id,
-            String email,
-            String login,
-            String role,
-            boolean emailVerified
-    ) {
-    }
-
-    public record OrganizerInfo(
-            Long id,
-            String name,
-            String apiKey,
-            String contactEmail,
-            OrganizerVerificationMode verificationMode,
-            boolean banned
-    ) {
+    public static OrganizerProfileResponse fromEntity(Organizer organizer) {
+        return new OrganizerProfileResponse(
+                organizer.getId(),
+                organizer.getName(),
+                organizer.getOrganizerCode(),
+                organizer.getContactEmail(),
+                organizer.getVerificationMode(),
+                organizer.isBanned(),
+                organizer.getApiKeyLast4(),
+                organizer.getApiKeyCreatedAt()
+        );
     }
 }

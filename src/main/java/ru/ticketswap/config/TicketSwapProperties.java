@@ -16,41 +16,18 @@ public class TicketSwapProperties {
     private final Storage storage = new Storage();
     private final Mail mail = new Mail();
     private final PartnerApi partnerApi = new PartnerApi();
+    private final PaymentApi paymentApi = new PaymentApi();
     private final Search search = new Search();
-    private final MockPartner mockPartner = new MockPartner();
     private final Bootstrap bootstrap = new Bootstrap();
 
-    public Security getSecurity() {
-        return security;
-    }
-
-    public Cors getCors() {
-        return cors;
-    }
-
-    public Storage getStorage() {
-        return storage;
-    }
-
-    public Mail getMail() {
-        return mail;
-    }
-
-    public PartnerApi getPartnerApi() {
-        return partnerApi;
-    }
-
-    public Search getSearch() {
-        return search;
-    }
-
-    public MockPartner getMockPartner() {
-        return mockPartner;
-    }
-
-    public Bootstrap getBootstrap() {
-        return bootstrap;
-    }
+    public Security getSecurity() { return security; }
+    public Cors getCors() { return cors; }
+    public Storage getStorage() { return storage; }
+    public Mail getMail() { return mail; }
+    public PartnerApi getPartnerApi() { return partnerApi; }
+    public PaymentApi getPaymentApi() { return paymentApi; }
+    public Search getSearch() { return search; }
+    public Bootstrap getBootstrap() { return bootstrap; }
 
     public static class Security {
         private final Jwt jwt = new Jwt();
@@ -58,403 +35,190 @@ public class TicketSwapProperties {
         private final PasswordReset passwordReset = new PasswordReset();
         private final EmailVerification emailVerification = new EmailVerification();
 
-        public Jwt getJwt() {
-            return jwt;
-        }
-
-        public TwoFactor getTwoFactor() {
-            return twoFactor;
-        }
-
-        public PasswordReset getPasswordReset() {
-            return passwordReset;
-        }
-
-        public EmailVerification getEmailVerification() {
-            return emailVerification;
-        }
+        public Jwt getJwt() { return jwt; }
+        public TwoFactor getTwoFactor() { return twoFactor; }
+        public PasswordReset getPasswordReset() { return passwordReset; }
+        public EmailVerification getEmailVerification() { return emailVerification; }
 
         public static class Jwt {
             @NotBlank
             private String secret;
-
             @Min(60_000)
             private long expirationMs;
-
-            public String getSecret() {
-                return secret;
-            }
-
-            public void setSecret(String secret) {
-                this.secret = secret;
-            }
-
-            public long getExpirationMs() {
-                return expirationMs;
-            }
-
-            public void setExpirationMs(long expirationMs) {
-                this.expirationMs = expirationMs;
-            }
+            public String getSecret() { return secret; }
+            public void setSecret(String secret) { this.secret = secret; }
+            public long getExpirationMs() { return expirationMs; }
+            public void setExpirationMs(long expirationMs) { this.expirationMs = expirationMs; }
         }
 
         public static class TwoFactor {
             @Min(60_000)
             private long codeExpirationMs;
-
             @Min(1)
             private int maxAttempts;
-
-            public long getCodeExpirationMs() {
-                return codeExpirationMs;
-            }
-
-            public void setCodeExpirationMs(long codeExpirationMs) {
-                this.codeExpirationMs = codeExpirationMs;
-            }
-
-            public int getMaxAttempts() {
-                return maxAttempts;
-            }
-
-            public void setMaxAttempts(int maxAttempts) {
-                this.maxAttempts = maxAttempts;
-            }
+            public long getCodeExpirationMs() { return codeExpirationMs; }
+            public void setCodeExpirationMs(long codeExpirationMs) { this.codeExpirationMs = codeExpirationMs; }
+            public int getMaxAttempts() { return maxAttempts; }
+            public void setMaxAttempts(int maxAttempts) { this.maxAttempts = maxAttempts; }
         }
 
         public static class PasswordReset {
             @Min(60_000)
             private long tokenExpirationMs;
-
-            public long getTokenExpirationMs() {
-                return tokenExpirationMs;
-            }
-
-            public void setTokenExpirationMs(long tokenExpirationMs) {
-                this.tokenExpirationMs = tokenExpirationMs;
-            }
+            public long getTokenExpirationMs() { return tokenExpirationMs; }
+            public void setTokenExpirationMs(long tokenExpirationMs) { this.tokenExpirationMs = tokenExpirationMs; }
         }
 
         public static class EmailVerification {
             @Min(60_000)
             private long tokenExpirationMs;
-
-            public long getTokenExpirationMs() {
-                return tokenExpirationMs;
-            }
-
-            public void setTokenExpirationMs(long tokenExpirationMs) {
-                this.tokenExpirationMs = tokenExpirationMs;
-            }
+            public long getTokenExpirationMs() { return tokenExpirationMs; }
+            public void setTokenExpirationMs(long tokenExpirationMs) { this.tokenExpirationMs = tokenExpirationMs; }
         }
     }
 
     public static class Cors {
         private List<String> allowedOrigins;
-
-        public List<String> getAllowedOrigins() {
-            return allowedOrigins;
-        }
-
-        public void setAllowedOrigins(List<String> allowedOrigins) {
-            this.allowedOrigins = allowedOrigins;
-        }
+        public List<String> getAllowedOrigins() { return allowedOrigins; }
+        public void setAllowedOrigins(List<String> allowedOrigins) { this.allowedOrigins = allowedOrigins; }
     }
 
     public static class Storage {
         private final S3 s3 = new S3();
-
-        public S3 getS3() {
-            return s3;
-        }
+        public S3 getS3() { return s3; }
 
         public static class S3 {
             @NotBlank
             private String endpoint;
-
             @NotBlank
             private String accessKey;
-
             @NotBlank
             private String secretKey;
-
             @NotBlank
             private String bucket;
-
             @Min(1)
             private int presignedGetExpiryMinutes = 15;
-
             private String publicEndpoint;
             private String region = "us-east-1";
             private boolean autoCreateBucket = true;
 
-            public String getEndpoint() {
-                return endpoint;
-            }
-
-            public void setEndpoint(String endpoint) {
-                this.endpoint = endpoint;
-            }
-
-            public String getAccessKey() {
-                return accessKey;
-            }
-
-            public void setAccessKey(String accessKey) {
-                this.accessKey = accessKey;
-            }
-
-            public String getSecretKey() {
-                return secretKey;
-            }
-
-            public void setSecretKey(String secretKey) {
-                this.secretKey = secretKey;
-            }
-
-            public String getBucket() {
-                return bucket;
-            }
-
-            public void setBucket(String bucket) {
-                this.bucket = bucket;
-            }
-
-            public int getPresignedGetExpiryMinutes() {
-                return presignedGetExpiryMinutes;
-            }
-
-            public void setPresignedGetExpiryMinutes(int presignedGetExpiryMinutes) {
-                this.presignedGetExpiryMinutes = presignedGetExpiryMinutes;
-            }
-
-            public String getPublicEndpoint() {
-                return publicEndpoint;
-            }
-
-            public void setPublicEndpoint(String publicEndpoint) {
-                this.publicEndpoint = publicEndpoint;
-            }
-
-            public String getRegion() {
-                return region;
-            }
-
-            public void setRegion(String region) {
-                this.region = region;
-            }
-
-            public boolean isAutoCreateBucket() {
-                return autoCreateBucket;
-            }
-
-            public void setAutoCreateBucket(boolean autoCreateBucket) {
-                this.autoCreateBucket = autoCreateBucket;
-            }
+            public String getEndpoint() { return endpoint; }
+            public void setEndpoint(String endpoint) { this.endpoint = endpoint; }
+            public String getAccessKey() { return accessKey; }
+            public void setAccessKey(String accessKey) { this.accessKey = accessKey; }
+            public String getSecretKey() { return secretKey; }
+            public void setSecretKey(String secretKey) { this.secretKey = secretKey; }
+            public String getBucket() { return bucket; }
+            public void setBucket(String bucket) { this.bucket = bucket; }
+            public int getPresignedGetExpiryMinutes() { return presignedGetExpiryMinutes; }
+            public void setPresignedGetExpiryMinutes(int presignedGetExpiryMinutes) { this.presignedGetExpiryMinutes = presignedGetExpiryMinutes; }
+            public String getPublicEndpoint() { return publicEndpoint; }
+            public void setPublicEndpoint(String publicEndpoint) { this.publicEndpoint = publicEndpoint; }
+            public String getRegion() { return region; }
+            public void setRegion(String region) { this.region = region; }
+            public boolean isAutoCreateBucket() { return autoCreateBucket; }
+            public void setAutoCreateBucket(boolean autoCreateBucket) { this.autoCreateBucket = autoCreateBucket; }
         }
     }
 
     public static class Mail {
         @NotBlank
         private String from;
-
         @NotBlank
         private String passwordResetUrlBase;
-
         @NotBlank
         private String emailVerificationUrlBase;
-
-        public String getFrom() {
-            return from;
-        }
-
-        public void setFrom(String from) {
-            this.from = from;
-        }
-
-        public String getPasswordResetUrlBase() {
-            return passwordResetUrlBase;
-        }
-
-        public void setPasswordResetUrlBase(String passwordResetUrlBase) {
-            this.passwordResetUrlBase = passwordResetUrlBase;
-        }
-
-        public String getEmailVerificationUrlBase() {
-            return emailVerificationUrlBase;
-        }
-
-        public void setEmailVerificationUrlBase(String emailVerificationUrlBase) {
-            this.emailVerificationUrlBase = emailVerificationUrlBase;
-        }
+        public String getFrom() { return from; }
+        public void setFrom(String from) { this.from = from; }
+        public String getPasswordResetUrlBase() { return passwordResetUrlBase; }
+        public void setPasswordResetUrlBase(String passwordResetUrlBase) { this.passwordResetUrlBase = passwordResetUrlBase; }
+        public String getEmailVerificationUrlBase() { return emailVerificationUrlBase; }
+        public void setEmailVerificationUrlBase(String emailVerificationUrlBase) { this.emailVerificationUrlBase = emailVerificationUrlBase; }
     }
 
     public static class PartnerApi {
         @NotBlank
         private String baseUrl;
-
+        
+        @NotBlank
+        private String internalToken;
         @Min(1)
         private long connectTimeoutMs = 1_000;
-
         @Min(1)
         private long readTimeoutMs = 2_000;
-
-        public String getBaseUrl() {
-            return baseUrl;
-        }
-
-        public void setBaseUrl(String baseUrl) {
-            this.baseUrl = baseUrl;
-        }
-
-        public long getConnectTimeoutMs() {
-            return connectTimeoutMs;
-        }
-
-        public void setConnectTimeoutMs(long connectTimeoutMs) {
-            this.connectTimeoutMs = connectTimeoutMs;
-        }
-
-        public long getReadTimeoutMs() {
-            return readTimeoutMs;
-        }
-
-        public void setReadTimeoutMs(long readTimeoutMs) {
-            this.readTimeoutMs = readTimeoutMs;
-        }
+        public String getBaseUrl() { return baseUrl; }
+        public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
+        public String getInternalToken() { return internalToken; }
+        public void setInternalToken(String internalToken) { this.internalToken = internalToken; }
+        public long getConnectTimeoutMs() { return connectTimeoutMs; }
+        public void setConnectTimeoutMs(long connectTimeoutMs) { this.connectTimeoutMs = connectTimeoutMs; }
+        public long getReadTimeoutMs() { return readTimeoutMs; }
+        public void setReadTimeoutMs(long readTimeoutMs) { this.readTimeoutMs = readTimeoutMs; }
     }
 
-
-    public static class MockPartner {
-        private boolean enabled = false;
+    public static class PaymentApi {
+        @NotBlank
+        private String baseUrl;
+        
+        @NotBlank
         private String internalToken;
-
-        public boolean isEnabled() {
-            return enabled;
-        }
-
-        public void setEnabled(boolean enabled) {
-            this.enabled = enabled;
-        }
-
-        public String getInternalToken() {
-            return internalToken;
-        }
-
-        public void setInternalToken(String internalToken) {
-            this.internalToken = internalToken;
-        }
+        @Min(1)
+        private long connectTimeoutMs = 1_000;
+        @Min(1)
+        private long readTimeoutMs = 2_000;
+        public String getBaseUrl() { return baseUrl; }
+        public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
+        public String getInternalToken() { return internalToken; }
+        public void setInternalToken(String internalToken) { this.internalToken = internalToken; }
+        public long getConnectTimeoutMs() { return connectTimeoutMs; }
+        public void setConnectTimeoutMs(long connectTimeoutMs) { this.connectTimeoutMs = connectTimeoutMs; }
+        public long getReadTimeoutMs() { return readTimeoutMs; }
+        public void setReadTimeoutMs(long readTimeoutMs) { this.readTimeoutMs = readTimeoutMs; }
     }
 
     public static class Bootstrap {
         private final Admin admin = new Admin();
-
-        public Admin getAdmin() {
-            return admin;
-        }
-
+        public Admin getAdmin() { return admin; }
         public static class Admin {
             private boolean enabled = false;
             private String email;
             private String login;
             private String password;
-
-            public boolean isEnabled() {
-                return enabled;
-            }
-
-            public void setEnabled(boolean enabled) {
-                this.enabled = enabled;
-            }
-
-            public String getEmail() {
-                return email;
-            }
-
-            public void setEmail(String email) {
-                this.email = email;
-            }
-
-            public String getLogin() {
-                return login;
-            }
-
-            public void setLogin(String login) {
-                this.login = login;
-            }
-
-            public String getPassword() {
-                return password;
-            }
-
-            public void setPassword(String password) {
-                this.password = password;
-            }
+            public boolean isEnabled() { return enabled; }
+            public void setEnabled(boolean enabled) { this.enabled = enabled; }
+            public String getEmail() { return email; }
+            public void setEmail(String email) { this.email = email; }
+            public String getLogin() { return login; }
+            public void setLogin(String login) { this.login = login; }
+            public String getPassword() { return password; }
+            public void setPassword(String password) { this.password = password; }
         }
     }
 
     public static class Search {
         private final Elasticsearch elasticsearch = new Elasticsearch();
-
-        public Elasticsearch getElasticsearch() {
-            return elasticsearch;
-        }
+        public Elasticsearch getElasticsearch() { return elasticsearch; }
 
         public static class Elasticsearch {
             private boolean enabled = false;
-
             @NotBlank
             private String baseUrl = "http://localhost:9200";
-
             @NotBlank
             private String indexName = "ticketswap-events";
-
             @Min(1)
             private long connectTimeoutMs = 1_000;
-
             @Min(1)
             private long readTimeoutMs = 2_000;
-
-            public boolean isEnabled() {
-                return enabled;
-            }
-
-            public void setEnabled(boolean enabled) {
-                this.enabled = enabled;
-            }
-
-            public String getBaseUrl() {
-                return baseUrl;
-            }
-
-            public void setBaseUrl(String baseUrl) {
-                this.baseUrl = baseUrl;
-            }
-
-            public String getIndexName() {
-                return indexName;
-            }
-
-            public void setIndexName(String indexName) {
-                this.indexName = indexName;
-            }
-
-            public long getConnectTimeoutMs() {
-                return connectTimeoutMs;
-            }
-
-            public void setConnectTimeoutMs(long connectTimeoutMs) {
-                this.connectTimeoutMs = connectTimeoutMs;
-            }
-
-            public long getReadTimeoutMs() {
-                return readTimeoutMs;
-            }
-
-            public void setReadTimeoutMs(long readTimeoutMs) {
-                this.readTimeoutMs = readTimeoutMs;
-            }
+            public boolean isEnabled() { return enabled; }
+            public void setEnabled(boolean enabled) { this.enabled = enabled; }
+            public String getBaseUrl() { return baseUrl; }
+            public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
+            public String getIndexName() { return indexName; }
+            public void setIndexName(String indexName) { this.indexName = indexName; }
+            public long getConnectTimeoutMs() { return connectTimeoutMs; }
+            public void setConnectTimeoutMs(long connectTimeoutMs) { this.connectTimeoutMs = connectTimeoutMs; }
+            public long getReadTimeoutMs() { return readTimeoutMs; }
+            public void setReadTimeoutMs(long readTimeoutMs) { this.readTimeoutMs = readTimeoutMs; }
         }
     }
-
 }

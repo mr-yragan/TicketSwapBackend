@@ -47,16 +47,16 @@ class HttpPartnerApiClientTest {
             capturedPath.set(exchange.getRequestURI().getPath());
             capturedBody.set(readBody(exchange));
             writeJson(exchange, 200, """
-                    {"valid":true,"ticketUid":"ticket-123","organizerCode":"org1","reason":"успешно"}
+                    {"valid":true,"ticketUid":"ticket-123","organizerCode":"org1","eventId":"event-1","reason":"успешно"}
                     """);
         });
 
-        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500));
+        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500), createProperties());
 
-        PartnerTicketVerifyResponse response = client.verifyTicket("org1", "ticket-123");
+        PartnerTicketVerifyResponse response = client.verifyTicket("org1", "ticket-123", "event-1");
 
         assertEquals("POST", capturedMethod.get());
-        assertEquals("/api/mock/partners/org1/tickets/verify", capturedPath.get());
+        assertEquals("/api/partners/org1/tickets/verify", capturedPath.get());
         assertTrue(capturedBody.get().contains("\"ticketUid\":\"ticket-123\""));
         assertTrue(response.valid());
         assertEquals("ticket-123", response.ticketUid());
@@ -69,11 +69,11 @@ class HttpPartnerApiClientTest {
                 {"error":"некорректный запрос"}
                 """));
 
-        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500));
+        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500), createProperties());
 
         PartnerIntegrationException ex = assertThrows(
                 PartnerIntegrationException.class,
-                () -> client.verifyTicket("org1", "ticket-123")
+                () -> client.verifyTicket("org1", "ticket-123", "event-1")
         );
 
         assertTrue(ex.getMessage().contains("400"));
@@ -85,11 +85,11 @@ class HttpPartnerApiClientTest {
                 {"error":"не найдено"}
                 """));
 
-        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500));
+        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500), createProperties());
 
         PartnerIntegrationException ex = assertThrows(
                 PartnerIntegrationException.class,
-                () -> client.verifyTicket("org1", "ticket-123")
+                () -> client.verifyTicket("org1", "ticket-123", "event-1")
         );
 
         assertTrue(ex.getMessage().contains("404"));
@@ -101,11 +101,11 @@ class HttpPartnerApiClientTest {
                 {"valid":true,"ticketUid":
                 """));
 
-        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500));
+        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500), createProperties());
 
         PartnerIntegrationException ex = assertThrows(
                 PartnerIntegrationException.class,
-                () -> client.verifyTicket("org1", "ticket-123")
+                () -> client.verifyTicket("org1", "ticket-123", "event-1")
         );
 
         assertTrue(ex.getMessage().contains("Запрос к API партнёра не выполнен"));
@@ -117,11 +117,11 @@ class HttpPartnerApiClientTest {
                 {"valid":true,"ticketUid":"ticket-123"}
                 """));
 
-        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500));
+        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500), createProperties());
 
         PartnerIntegrationException ex = assertThrows(
                 PartnerIntegrationException.class,
-                () -> client.verifyTicket("org1", "ticket-123")
+                () -> client.verifyTicket("org1", "ticket-123", "event-1")
         );
 
         assertTrue(ex.getMessage().contains("некорректный код организатора"));
@@ -136,15 +136,15 @@ class HttpPartnerApiClientTest {
                 Thread.currentThread().interrupt();
             }
             writeJson(exchange, 200, """
-                    {"valid":true,"ticketUid":"ticket-123","organizerCode":"org1"}
+                    {"valid":true,"ticketUid":"ticket-123","organizerCode":"org1","eventId":"event-1"}
                     """);
         });
 
-        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(100, 50));
+        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(100, 50), createProperties());
 
         PartnerIntegrationException ex = assertThrows(
                 PartnerIntegrationException.class,
-                () -> client.verifyTicket("org1", "ticket-123")
+                () -> client.verifyTicket("org1", "ticket-123", "event-1")
         );
 
         assertTrue(ex.getMessage().contains("Запрос к API партнёра не выполнен"));
@@ -161,16 +161,16 @@ class HttpPartnerApiClientTest {
             capturedPath.set(exchange.getRequestURI().getPath());
             capturedBody.set(readBody(exchange));
             writeJson(exchange, 200, """
-                    {"success":true,"originalTicketUid":"ticket-123","newTicketUid":"REISSUED-org1-ticket-123","organizerCode":"org1"}
+                    {"success":true,"originalTicketUid":"ticket-123","newTicketUid":"REISSUED-org1-ticket-123","organizerCode":"org1","eventId":"event-1","operationId":"op-1"}
                     """);
         });
 
-        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500));
+        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500), createProperties());
 
-        PartnerTicketReissueResponse response = client.reissueTicket("org1", "ticket-123", "buyer@example.com");
+        PartnerTicketReissueResponse response = client.reissueTicket("org1", "ticket-123", "buyer@example.com", "event-1", "op-1");
 
         assertEquals("POST", capturedMethod.get());
-        assertEquals("/api/mock/partners/org1/tickets/reissue", capturedPath.get());
+        assertEquals("/api/partners/org1/tickets/reissue", capturedPath.get());
         assertTrue(capturedBody.get().contains("\"originalTicketUid\":\"ticket-123\""));
         assertTrue(capturedBody.get().contains("\"buyerEmail\":\"buyer@example.com\""));
         assertTrue(response.success());
@@ -181,12 +181,12 @@ class HttpPartnerApiClientTest {
     @Test
     void reissueTicketAllowsBusinessFailureResponse() throws Exception {
         startServer(exchange -> writeJson(exchange, 200, """
-                {"success":false,"originalTicketUid":"ticket-FAIL","organizerCode":"org1","reason":"Mock-перевыпуск не выполнен"}
+                {"success":false,"originalTicketUid":"ticket-FAIL","organizerCode":"org1","eventId":"event-1","operationId":"op-1","reason":"Mock-перевыпуск не выполнен"}
                 """));
 
-        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500));
+        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500), createProperties());
 
-        PartnerTicketReissueResponse response = client.reissueTicket("org1", "ticket-FAIL", "buyer@example.com");
+        PartnerTicketReissueResponse response = client.reissueTicket("org1", "ticket-FAIL", "buyer@example.com", "event-1", "op-1");
 
         assertEquals(false, response.success());
         assertEquals("Mock-перевыпуск не выполнен", response.reason());
@@ -195,14 +195,14 @@ class HttpPartnerApiClientTest {
     @Test
     void reissueTicketFailsOnUnexpectedSuccessfulResponseContract() throws Exception {
         startServer(exchange -> writeJson(exchange, 200, """
-                {"success":true,"originalTicketUid":"ticket-123","organizerCode":"org1"}
+                {"success":true,"originalTicketUid":"ticket-123","organizerCode":"org1","eventId":"event-1","operationId":"op-1"}
                 """));
 
-        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500));
+        HttpPartnerApiClient client = new HttpPartnerApiClient(createConfiguredRestClient(500, 500), createProperties());
 
         PartnerIntegrationException ex = assertThrows(
                 PartnerIntegrationException.class,
-                () -> client.reissueTicket("org1", "ticket-123", "buyer@example.com")
+                () -> client.reissueTicket("org1", "ticket-123", "buyer@example.com", "event-1", "op-1")
         );
 
         assertTrue(ex.getMessage().contains("некорректный UID нового билета"));
@@ -220,6 +220,12 @@ class HttpPartnerApiClientTest {
         executor = Executors.newCachedThreadPool();
         server.setExecutor(executor);
         server.start();
+    }
+
+    private TicketSwapProperties createProperties() {
+        TicketSwapProperties properties = new TicketSwapProperties();
+        properties.getPartnerApi().setInternalToken("test-token");
+        return properties;
     }
 
     private org.springframework.web.client.RestClient createConfiguredRestClient(long connectTimeoutMs, long readTimeoutMs) {

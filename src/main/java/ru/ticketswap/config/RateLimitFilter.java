@@ -27,7 +27,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final int AUTH_LIMIT = 10;
     private static final int RESEND_LIMIT = 5;
     private static final int PURCHASE_LIMIT = 20;
-    private static final int MOCK_PARTNER_LIMIT = 120;
     private static final int CLEANUP_EVERY_REQUESTS = 500;
 
     private static final Pattern HOLD_PATH = Pattern.compile("^/api/tickets/\\d+/hold$");
@@ -79,9 +78,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
         if (HttpMethod.POST.matches(method) && BUY_PATH.matcher(uri).matches()) {
             return new Rule("buy", PURCHASE_LIMIT);
-        }
-        if (uri.startsWith("/api/mock/partners/")) {
-            return new Rule("mock-partner", MOCK_PARTNER_LIMIT);
         }
         return null;
     }

@@ -15,13 +15,13 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     List<Event> findAllByOrganizerIdOrderByStartsAtAscIdAsc(Long organizerId);
 
     @EntityGraph(attributePaths = {"organizer", "venue"})
-    List<Event> findAllByOrganizerApiKeyIgnoreCaseOrderByStartsAtAscIdAsc(String apiKey);
+    List<Event> findAllByOrganizerOrganizerCodeIgnoreCaseOrderByStartsAtAscIdAsc(String organizerCode);
 
     @EntityGraph(attributePaths = {"organizer", "venue"})
     Optional<Event> findByIdAndOrganizerId(Long id, Long organizerId);
 
     @EntityGraph(attributePaths = {"organizer", "venue"})
-    Optional<Event> findByOrganizerApiKeyIgnoreCaseAndEventIdIgnoreCase(String apiKey, String eventId);
+    Optional<Event> findByOrganizerOrganizerCodeIgnoreCaseAndEventIdIgnoreCase(String organizerCode, String eventId);
 
     @EntityGraph(attributePaths = {"organizer", "venue"})
     Optional<Event> findByOrganizerIdAndEventIdIgnoreCase(Long organizerId, String eventId);

@@ -3,7 +3,6 @@ package ru.ticketswap.partner;
 import org.springframework.stereotype.Component;
 import ru.ticketswap.organizer.OrganizerRepository;
 
-import java.util.Locale;
 import java.util.Optional;
 
 @Component
@@ -16,29 +15,20 @@ public class PartnerOrganizerCodeMapper {
     }
 
     public Optional<String> resolveOrganizerCode(String organizerName) {
-        String normalizedOrganizerName = normalizeOrganizerName(organizerName);
-        if (normalizedOrganizerName == null) {
+        if (organizerName == null || organizerName.isBlank()) {
             return Optional.empty();
         }
-
-        return organizerRepository.findByApiKeyIgnoreCase(normalizedOrganizerName)
-                .map(organizer -> organizer.getApiKey());
+        String normalizedOrganizerName = organizerName.trim();
+        return organizerRepository.findByOrganizerCodeIgnoreCase(normalizedOrganizerName)
+                .or(() -> organizerRepository.findByNameIgnoreCase(normalizedOrganizerName))
+                .filter(organizer -> organizer.isExternalApi() && !organizer.isBanned())
+                .map(organizer -> organizer.getOrganizerCode());
     }
 
     public String normalizeOrganizerName(String organizerName) {
         if (organizerName == null) {
             return null;
         }
-
-        String normalized = organizerName.trim().toLowerCase(Locale.ROOT);
-        if (normalized.isEmpty()) {
-            return null;
-        }
-
-        return normalized;
-    }
-
-    public boolean isSupportedOrganizer(String organizerName) {
-        return resolveOrganizerCode(organizerName).isPresent();
+        return organizerName.trim();
     }
 }

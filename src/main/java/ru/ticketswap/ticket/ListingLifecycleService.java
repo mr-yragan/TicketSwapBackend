@@ -118,7 +118,7 @@ public class ListingLifecycleService {
             return new ValidationContext(lot.getUid(), null, resolveEventId(lot), true);
         }
 
-        String organizerCode = organizer.getApiKey();
+        String organizerCode = organizer.getOrganizerCode();
         if (organizerCode == null || organizerCode.isBlank()) {
             organizerCode = partnerOrganizerCodeMapper.resolveOrganizerCode(lot.getOrganizerName()).orElse(null);
         }
@@ -130,7 +130,16 @@ public class ListingLifecycleService {
         try {
             PartnerTicketVerifyResponse response = partnerApiClient.verifyTicket(organizerCode, ticketUid, eventId);
             if (response.valid()) {
-                if (eventId != null && response.eventId() != null && !eventId.equalsIgnoreCase(response.eventId())) {
+                if (response.ticketUid() == null || !ticketUid.equalsIgnoreCase(response.ticketUid())) {
+                    return PartnerValidationOutcome.failure("Проверка партнёра не пройдена: партнёр вернул другой UID билета");
+                }
+                if (response.organizerCode() == null || !organizerCode.equalsIgnoreCase(response.organizerCode())) {
+                    return PartnerValidationOutcome.failure("Проверка партнёра не пройдена: партнёр вернул другой код организатора");
+                }
+                if (eventId == null || eventId.isBlank()) {
+                    return PartnerValidationOutcome.failure("Проверка партнёра не пройдена: для внешнего организатора обязателен eventId");
+                }
+                if (response.eventId() == null || response.eventId().isBlank() || !eventId.equalsIgnoreCase(response.eventId())) {
                     return PartnerValidationOutcome.failure("Проверка партнёра не пройдена: билет относится к другому мероприятию");
                 }
                 return PartnerValidationOutcome.success();

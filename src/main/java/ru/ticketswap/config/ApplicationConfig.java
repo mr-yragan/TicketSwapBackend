@@ -3,6 +3,7 @@ package ru.ticketswap.config;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -11,7 +12,6 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.client.RestClient;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import ru.ticketswap.user.UserIdentityService;
 
 import java.time.Clock;
@@ -54,30 +54,21 @@ public class ApplicationConfig {
     @Qualifier("partnerApiRestClient")
     public RestClient partnerApiRestClient() {
         TicketSwapProperties.PartnerApi properties = ticketSwapProperties.getPartnerApi();
+        return createRestClient(properties.getBaseUrl(), properties.getConnectTimeoutMs(), properties.getReadTimeoutMs());
+    }
 
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Math.toIntExact(properties.getConnectTimeoutMs()));
-        requestFactory.setReadTimeout(Math.toIntExact(properties.getReadTimeoutMs()));
-
-        return RestClient.builder()
-                .baseUrl(properties.getBaseUrl())
-                .requestFactory(requestFactory)
-                .build();
+    @Bean
+    @Qualifier("paymentApiRestClient")
+    public RestClient paymentApiRestClient() {
+        TicketSwapProperties.PaymentApi properties = ticketSwapProperties.getPaymentApi();
+        return createRestClient(properties.getBaseUrl(), properties.getConnectTimeoutMs(), properties.getReadTimeoutMs());
     }
 
     @Bean
     @Qualifier("elasticsearchRestClient")
     public RestClient elasticsearchRestClient() {
         TicketSwapProperties.Search.Elasticsearch properties = ticketSwapProperties.getSearch().getElasticsearch();
-
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Math.toIntExact(properties.getConnectTimeoutMs()));
-        requestFactory.setReadTimeout(Math.toIntExact(properties.getReadTimeoutMs()));
-
-        return RestClient.builder()
-                .baseUrl(properties.getBaseUrl())
-                .requestFactory(requestFactory)
-                .build();
+        return createRestClient(properties.getBaseUrl(), properties.getConnectTimeoutMs(), properties.getReadTimeoutMs());
     }
 
     @Bean
@@ -85,4 +76,13 @@ public class ApplicationConfig {
         return Clock.systemUTC();
     }
 
+    private RestClient createRestClient(String baseUrl, long connectTimeoutMs, long readTimeoutMs) {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Math.toIntExact(connectTimeoutMs));
+        requestFactory.setReadTimeout(Math.toIntExact(readTimeoutMs));
+        return RestClient.builder()
+                .baseUrl(baseUrl)
+                .requestFactory(requestFactory)
+                .build();
+    }
 }

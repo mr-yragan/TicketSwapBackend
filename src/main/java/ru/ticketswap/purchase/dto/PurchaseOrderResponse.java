@@ -20,9 +20,12 @@ public record PurchaseOrderResponse(
         BigDecimal amount,
         String currency,
         String failureReason,
+        String paymentOperationId,
+        String partnerOperationId,
         Instant createdAt,
         Instant updatedAt,
-        Instant completedAt
+        Instant completedAt,
+        Instant refundedAt
 ) {
 
     public static PurchaseOrderResponse fromEntity(PurchaseOrder order, boolean includePrivateParties) {
@@ -39,9 +42,12 @@ public record PurchaseOrderResponse(
                 order.getAmount(),
                 order.getCurrency(),
                 order.getFailureReason(),
+                includePrivateParties ? order.getPaymentOperationId() : null,
+                includePrivateParties ? order.getPartnerOperationId() : null,
                 order.getCreatedAt(),
                 order.getUpdatedAt(),
-                order.getCompletedAt()
+                order.getCompletedAt(),
+                order.getRefundedAt()
         );
     }
 }

@@ -19,10 +19,19 @@ databaseChangeLog:
                   constraints:
                     nullable: false
               - column:
-                  name: api_key
+                  name: organizer_code
                   type: varchar(64)
                   constraints:
                     nullable: false
+              - column:
+                  name: api_key_hash
+                  type: varchar(255)
+              - column:
+                  name: api_key_last4
+                  type: varchar(4)
+              - column:
+                  name: api_key_created_at
+                  type: timestamp with time zone
               - column:
                   name: contact_email
                   type: varchar(255)
@@ -30,8 +39,8 @@ databaseChangeLog:
                     nullable: false
         - addUniqueConstraint:
             tableName: organizers
-            columnNames: api_key
-            constraintName: uq_organizers_api_key
+            columnNames: organizer_code
+            constraintName: uq_organizers_organizer_code
         - addUniqueConstraint:
             tableName: organizers
             columnNames: contact_email

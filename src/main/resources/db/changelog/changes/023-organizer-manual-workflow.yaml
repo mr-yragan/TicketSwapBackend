@@ -20,11 +20,6 @@ databaseChangeLog:
                   defaultValueBoolean: false
                   constraints:
                     nullable: false
-        - dropNotNullConstraint:
-            tableName: organizers
-            columnName: api_key
-            columnDataType: varchar(64)
-
   - changeSet:
       id: 023-tickets-add-organizer-and-reissued-file
       author: vanya
@@ -61,7 +56,7 @@ databaseChangeLog:
               WHERE t.organizer_id IS NULL
                 AND t.organizer_name IS NOT NULL
                 AND (
-                  lower(o.api_key) = lower(t.organizer_name)
+                  lower(o.organizer_code) = lower(t.organizer_name)
                   OR lower(o.name) = lower(t.organizer_name)
                 );
         - addForeignKeyConstraint:

@@ -8,7 +8,13 @@ import ru.ticketswap.common.BusinessRuleException;
 import ru.ticketswap.common.ConflictException;
 import ru.ticketswap.common.NotFoundException;
 import ru.ticketswap.hold.ListingHold;
+import ru.ticketswap.audit.AuditLogService;
 import ru.ticketswap.hold.ListingHoldRepository;
+import ru.ticketswap.notification.NotificationOutboxService;
+import ru.ticketswap.payment.PaymentAuthorizeResponse;
+import ru.ticketswap.payment.PaymentCaptureResponse;
+import ru.ticketswap.payment.PaymentGatewayClient;
+import ru.ticketswap.payment.PaymentIntegrationException;
 import ru.ticketswap.organizer.Organizer;
 import ru.ticketswap.organizer.OrganizerVerificationMode;
 import ru.ticketswap.partner.PartnerApiClient;
@@ -41,6 +47,9 @@ public class PurchaseService {
     private final ListingStatusHistoryService listingStatusHistoryService;
     private final PartnerApiClient partnerApiClient;
     private final PartnerOrganizerCodeMapper partnerOrganizerCodeMapper;
+    private final PaymentGatewayClient paymentGatewayClient;
+    private final AuditLogService auditLogService;
+    private final NotificationOutboxService notificationOutboxService;
 
     public PurchaseService(
             TicketRepository ticketRepository,
@@ -49,7 +58,10 @@ public class PurchaseService {
             PlatformTransactionManager transactionManager,
             ListingStatusHistoryService listingStatusHistoryService,
             PartnerApiClient partnerApiClient,
-            PartnerOrganizerCodeMapper partnerOrganizerCodeMapper
+            PartnerOrganizerCodeMapper partnerOrganizerCodeMapper,
+            PaymentGatewayClient paymentGatewayClient,
+            AuditLogService auditLogService,
+            NotificationOutboxService notificationOutboxService
     ) {
         this.ticketRepository = ticketRepository;
         this.listingHoldRepository = listingHoldRepository;
@@ -58,6 +70,9 @@ public class PurchaseService {
         this.listingStatusHistoryService = listingStatusHistoryService;
         this.partnerApiClient = partnerApiClient;
         this.partnerOrganizerCodeMapper = partnerOrganizerCodeMapper;
+        this.paymentGatewayClient = paymentGatewayClient;
+        this.auditLogService = auditLogService;
+        this.notificationOutboxService = notificationOutboxService;
     }
 
     public ListingHold createHold(Long listingId, User buyer) {
@@ -88,14 +103,25 @@ public class PurchaseService {
             return started.completedListing();
         }
 
+        PaymentAuthorizeResponse payment = authorizePayment(started.orderId(), buyer, normalizedIdempotencyKey);
+        if (!payment.authorized()) {
+            return tx.execute(status -> failPaymentAuthorizationTx(listingId, buyer, started.orderId(), failureReason(payment.reason())));
+        }
+        tx.executeWithoutResult(status -> markPaymentAuthorizedTx(started.orderId(), payment.paymentOperationId()));
+
         if (started.manual()) {
             return tx.execute(status -> markWaitingManualReissueTx(listingId, buyer, started.orderId()));
         }
 
-        tx.executeWithoutResult(status -> markPartnerOperationStartedTx(started.orderId()));
-        ReissueResult reissueResult = reissueTicketWithPartner(listingId, buyer);
+        String partnerOperationId = tx.execute(status -> markPartnerOperationStartedTx(started.orderId()));
+        ReissueResult reissueResult = reissueTicketWithPartner(listingId, buyer, partnerOperationId);
         if (!reissueResult.success()) {
             return tx.execute(status -> failPurchaseTx(listingId, buyer, started.orderId(), reissueResult.failureReason()));
+        }
+
+        PaymentCaptureResponse capture = capturePayment(started.orderId());
+        if (!capture.captured()) {
+            return tx.execute(status -> failPurchaseTx(listingId, buyer, started.orderId(), "Платёж не захвачен: " + failureReason(capture.reason())));
         }
 
         return tx.execute(status -> completePurchaseTx(listingId, buyer, started.orderId(), reissueResult.reissuedTicketUid()));
@@ -191,14 +217,56 @@ public class PurchaseService {
         }
 
         listing.setBuyer(buyer);
-        listingStatusHistoryService.transition(listing, TicketStatus.PROCESSING, "Покупка начата, платёж условно авторизован", buyer);
+        listingStatusHistoryService.transition(listing, TicketStatus.PROCESSING, "Покупка начата, ожидается авторизация платежа", buyer);
 
         PurchaseOrder order = new PurchaseOrder(listing, buyer, idempotencyKey);
-        order.setPaymentStatus(PaymentStatus.AUTHORIZED);
-        order.setStatus(requiresManualReissue(listing) ? PurchaseOrderStatus.WAITING_MANUAL_REISSUE : PurchaseOrderStatus.PROCESSING_REISSUE);
+        order.setPaymentStatus(PaymentStatus.NOT_STARTED);
+        order.setStatus(PurchaseOrderStatus.CREATED);
         PurchaseOrder savedOrder = purchaseOrderRepository.saveAndFlush(order);
 
         return new StartProcessingResult(savedOrder.getId(), requiresManualReissue(listing), null);
+    }
+
+    private PaymentAuthorizeResponse authorizePayment(Long orderId, User buyer, String idempotencyKey) {
+        PurchaseOrder order = purchaseOrderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Заказ не найден"));
+        try {
+            return paymentGatewayClient.authorize(
+                    "ORDER-" + order.getId(),
+                    order.getAmount(),
+                    order.getCurrency(),
+                    buyer.getEmail(),
+                    idempotencyKey == null ? "order-" + order.getId() : idempotencyKey
+            );
+        } catch (PaymentIntegrationException ex) {
+            return new PaymentAuthorizeResponse(false, null, "платёжный сервис недоступен");
+        }
+    }
+
+    private PaymentCaptureResponse capturePayment(Long orderId) {
+        PurchaseOrder order = purchaseOrderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Заказ не найден"));
+        try {
+            return paymentGatewayClient.capture(order.getPaymentOperationId());
+        } catch (PaymentIntegrationException ex) {
+            return new PaymentCaptureResponse(false, order.getPaymentOperationId(), "платёжный сервис недоступен");
+        }
+    }
+
+    private TicketLot failPaymentAuthorizationTx(Long listingId, User buyer, Long orderId, String reason) {
+        TicketLot listing = ticketRepository.findByIdForUpdate(listingId)
+                .orElseThrow(() -> new NotFoundException("Билет не найден"));
+        PurchaseOrder order = purchaseOrderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Заказ не найден"));
+        order.setStatus(PurchaseOrderStatus.FAILED);
+        order.setPaymentStatus(PaymentStatus.FAILED);
+        order.setFailureReason("Платёж не авторизован: " + reason);
+        purchaseOrderRepository.saveAndFlush(order);
+        listing.setBuyer(null);
+        listingStatusHistoryService.transition(listing, TicketStatus.PENDING_RECIPIENT, "Платёж не авторизован, объявление возвращено в продажу", null);
+        listingHoldRepository.deleteByListingId(listingId);
+        auditLogService.record(buyer, "PAYMENT_AUTHORIZATION_FAILED", "PURCHASE_ORDER", orderId, reason);
+        return listing;
     }
 
     private TicketLot markWaitingManualReissueTx(Long listingId, User buyer, Long orderId) {
@@ -217,11 +285,24 @@ public class PurchaseService {
         return listing;
     }
 
-    private void markPartnerOperationStartedTx(Long orderId) {
+    private String markPartnerOperationStartedTx(Long orderId) {
         PurchaseOrder order = purchaseOrderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Заказ не найден"));
-        order.setPartnerOperationId("REISSUE-" + order.getListing().getId() + "-" + order.getId());
+        String operationId = "REISSUE-" + order.getListing().getId() + "-" + order.getId();
+        order.setPartnerOperationId(operationId);
         order.setStatus(PurchaseOrderStatus.PROCESSING_REISSUE);
+        purchaseOrderRepository.saveAndFlush(order);
+        return operationId;
+    }
+
+    private void markPaymentAuthorizedTx(Long orderId, String paymentOperationId) {
+        PurchaseOrder order = purchaseOrderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Заказ не найден"));
+        order.setPaymentOperationId(paymentOperationId);
+        order.setPaymentStatus(PaymentStatus.AUTHORIZED);
+        if (order.getStatus() == PurchaseOrderStatus.CREATED) {
+            order.setStatus(PurchaseOrderStatus.PAYMENT_AUTHORIZED);
+        }
         purchaseOrderRepository.saveAndFlush(order);
     }
 
@@ -280,13 +361,13 @@ public class PurchaseService {
         return organizer != null && organizer.getVerificationMode() == OrganizerVerificationMode.MANUAL;
     }
 
-    private ReissueResult reissueTicketWithPartner(Long listingId, User buyer) {
+    private ReissueResult reissueTicketWithPartner(Long listingId, User buyer, String partnerOperationId) {
         TicketLot listing = ticketRepository.findById(listingId)
                 .orElseThrow(() -> new NotFoundException("Билет не найден"));
 
         String organizerCode = null;
         if (listing.getOrganizer() != null) {
-            organizerCode = listing.getOrganizer().getApiKey();
+            organizerCode = listing.getOrganizer().getOrganizerCode();
         }
         if (organizerCode == null || organizerCode.isBlank()) {
             organizerCode = partnerOrganizerCodeMapper.resolveOrganizerCode(listing.getOrganizerName()).orElse(null);
@@ -296,14 +377,29 @@ public class PurchaseService {
         }
 
         try {
+            String eventId = listing.getEvent() == null ? null : listing.getEvent().getEventId();
             PartnerTicketReissueResponse response = partnerApiClient.reissueTicket(
                     organizerCode,
                     listing.getUid(),
-                    buyer.getEmail()
+                    buyer.getEmail(),
+                    eventId,
+                    partnerOperationId
             );
 
             if (!response.success()) {
                 return ReissueResult.failed("Перевыпуск у партнёра не выполнен: " + failureReason(response.reason()));
+            }
+            if (!listing.getUid().equalsIgnoreCase(response.originalTicketUid())) {
+                return ReissueResult.failed("Перевыпуск у партнёра не выполнен: партнёр вернул другой исходный UID");
+            }
+            if (!organizerCode.equalsIgnoreCase(response.organizerCode())) {
+                return ReissueResult.failed("Перевыпуск у партнёра не выполнен: партнёр вернул другой код организатора");
+            }
+            if (eventId == null || response.eventId() == null || !eventId.equalsIgnoreCase(response.eventId())) {
+                return ReissueResult.failed("Перевыпуск у партнёра не выполнен: партнёр вернул другой eventId");
+            }
+            if (!partnerOperationId.equals(response.operationId())) {
+                return ReissueResult.failed("Перевыпуск у партнёра не выполнен: нарушена идемпотентность операции");
             }
 
             return ReissueResult.success(response.newTicketUid());

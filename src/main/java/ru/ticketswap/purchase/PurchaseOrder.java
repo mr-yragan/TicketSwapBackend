@@ -59,6 +59,9 @@ public class PurchaseOrder {
     @Column(name = "partner_operation_id", length = 255)
     private String partnerOperationId;
 
+    @Column(name = "payment_operation_id", length = 255)
+    private String paymentOperationId;
+
     @Column(name = "failure_reason", length = 2000)
     private String failureReason;
 
@@ -70,6 +73,9 @@ public class PurchaseOrder {
 
     @Column(name = "completed_at")
     private Instant completedAt;
+
+    @Column(name = "refunded_at")
+    private Instant refundedAt;
 
     protected PurchaseOrder() {
     }
@@ -147,6 +153,14 @@ public class PurchaseOrder {
         return partnerOperationId;
     }
 
+    public String getPaymentOperationId() {
+        return paymentOperationId;
+    }
+
+    public void setPaymentOperationId(String paymentOperationId) {
+        this.paymentOperationId = paymentOperationId;
+    }
+
     public void setPartnerOperationId(String partnerOperationId) {
         this.partnerOperationId = partnerOperationId;
     }
@@ -169,6 +183,14 @@ public class PurchaseOrder {
 
     public Instant getCompletedAt() {
         return completedAt;
+    }
+
+    public Instant getRefundedAt() {
+        return refundedAt;
+    }
+
+    public void setRefundedAt(Instant refundedAt) {
+        this.refundedAt = refundedAt;
     }
 
     public void setCompletedAt(Instant completedAt) {
