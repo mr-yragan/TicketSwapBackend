@@ -3,6 +3,7 @@ package ru.ticketswap.ticket;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import ru.ticketswap.audit.AuditLogService;
 import ru.ticketswap.organizer.Organizer;
 import ru.ticketswap.organizer.OrganizerVerificationMode;
 import ru.ticketswap.partner.PartnerApiClient;
@@ -31,6 +32,7 @@ public class ListingLifecycleService {
     private final ListingStatusHistoryService listingStatusHistoryService;
     private final PartnerApiClient partnerApiClient;
     private final PartnerOrganizerCodeMapper partnerOrganizerCodeMapper;
+    private final AuditLogService auditLogService;
     private final Clock clock;
 
     public ListingLifecycleService(
@@ -39,6 +41,7 @@ public class ListingLifecycleService {
             ListingStatusHistoryService listingStatusHistoryService,
             PartnerApiClient partnerApiClient,
             PartnerOrganizerCodeMapper partnerOrganizerCodeMapper,
+            AuditLogService auditLogService,
             Clock clock
     ) {
         this.ticketRepository = ticketRepository;
@@ -46,6 +49,7 @@ public class ListingLifecycleService {
         this.listingStatusHistoryService = listingStatusHistoryService;
         this.partnerApiClient = partnerApiClient;
         this.partnerOrganizerCodeMapper = partnerOrganizerCodeMapper;
+        this.auditLogService = auditLogService;
         this.clock = clock;
     }
 
@@ -168,10 +172,14 @@ public class ListingLifecycleService {
         }
 
         if (outcome.passed()) {
-            return listingStatusHistoryService.transition(lot, TicketStatus.PENDING_RECIPIENT, PARTNER_VALIDATION_PASSED_REASON, null);
+            TicketLot saved = listingStatusHistoryService.transition(lot, TicketStatus.PENDING_RECIPIENT, PARTNER_VALIDATION_PASSED_REASON, null);
+            auditLogService.recordSystem("TICKET_VALIDATION_APPROVED", "TICKET_LOT", lot.getId(), details(lot, "mode=EXTERNAL_API"));
+            return saved;
         }
 
-        return listingStatusHistoryService.transition(lot, TicketStatus.FAILED, outcome.reason(), null);
+        TicketLot saved = listingStatusHistoryService.transition(lot, TicketStatus.FAILED, outcome.reason(), null);
+        auditLogService.recordSystem("TICKET_VALIDATION_REJECTED", "TICKET_LOT", lot.getId(), details(lot, "reason=" + outcome.reason()));
+        return saved;
     }
 
     private String resolveEventId(TicketLot lot) {
@@ -179,6 +187,18 @@ public class ListingLifecycleService {
             return null;
         }
         return lot.getEvent().getEventId().trim();
+    }
+
+    private String details(TicketLot lot, String extra) {
+        String eventId = lot.getEvent() == null ? null : lot.getEvent().getEventId();
+        Long organizerId = lot.getOrganizer() == null ? null : lot.getOrganizer().getId();
+        Long sellerId = lot.getSeller() == null ? null : lot.getSeller().getId();
+        return "listingId=" + lot.getId()
+                + "; uid=" + lot.getUid()
+                + "; eventId=" + eventId
+                + "; organizerId=" + organizerId
+                + "; sellerId=" + sellerId
+                + "; " + extra;
     }
 
     private record ValidationContext(String ticketUid, String organizerCode, String eventId, boolean manual) {
