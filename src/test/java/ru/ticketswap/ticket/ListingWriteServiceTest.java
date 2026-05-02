@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import ru.ticketswap.audit.AuditLogService;
 import ru.ticketswap.ticket.history.ListingStatusHistoryService;
 import ru.ticketswap.user.User;
 
@@ -24,9 +25,12 @@ class ListingWriteServiceTest {
     @Mock
     private ListingStatusHistoryService listingStatusHistoryService;
 
+    @Mock
+    private AuditLogService auditLogService;
+
     @Test
     void prepareForRevalidationClearsBuyerAndRecordsHistory() {
-        ListingWriteService service = new ListingWriteService(ticketRepository, listingStatusHistoryService);
+        ListingWriteService service = new ListingWriteService(ticketRepository, listingStatusHistoryService, auditLogService);
         User seller = new User("seller@example.com", "hash");
         User buyer = new User("buyer@example.com", "hash");
         TicketLot listing = new TicketLot(
@@ -64,7 +68,7 @@ class ListingWriteServiceTest {
 
     @Test
     void prepareForRevalidationRecordsReasonEvenWhenStatusIsAlreadyCreated() {
-        ListingWriteService service = new ListingWriteService(ticketRepository, listingStatusHistoryService);
+        ListingWriteService service = new ListingWriteService(ticketRepository, listingStatusHistoryService, auditLogService);
         User seller = new User("seller@example.com", "hash");
         TicketLot listing = new TicketLot(
                 "uid-1",
