@@ -2,6 +2,7 @@ package ru.ticketswap.ticket;
 
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
+import ru.ticketswap.audit.AuditLogService;
 import ru.ticketswap.ticket.history.ListingStatusHistoryService;
 import ru.ticketswap.user.User;
 
@@ -12,13 +13,16 @@ public class ListingWriteService {
 
     private final TicketRepository ticketRepository;
     private final ListingStatusHistoryService listingStatusHistoryService;
+    private final AuditLogService auditLogService;
 
     public ListingWriteService(
             TicketRepository ticketRepository,
-            ListingStatusHistoryService listingStatusHistoryService
+            ListingStatusHistoryService listingStatusHistoryService,
+            AuditLogService auditLogService
     ) {
         this.ticketRepository = ticketRepository;
         this.listingStatusHistoryService = listingStatusHistoryService;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -35,6 +39,13 @@ public class ListingWriteService {
                 TicketStatus.CREATED,
                 REVALIDATION_REASON,
                 changedByUser
+        );
+        auditLogService.record(
+                changedByUser,
+                "TICKET_REVALIDATION_REQUESTED",
+                "TICKET_LOT",
+                saved.getId(),
+                "listingId=" + saved.getId() + "; previousStatus=" + previousStatus + "; uid=" + saved.getUid()
         );
 
         return saved;
