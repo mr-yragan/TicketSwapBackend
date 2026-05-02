@@ -92,20 +92,24 @@ public class ManualOrganizerWorkflowService {
 
         if (approved) {
             ensureListingHasFile(listing);
-            return listingStatusHistoryService.transition(
+            TicketLot saved = listingStatusHistoryService.transition(
                     listing,
                     TicketStatus.PENDING_RECIPIENT,
                     buildReason(MANUAL_VALIDATION_APPROVED_REASON, reason),
                     actor
             );
+            auditLogService.record(actor, "TICKET_VALIDATION_APPROVED", "TICKET_LOT", listingId, details(listing, "mode=MANUAL"));
+            return saved;
         }
 
-        return listingStatusHistoryService.transition(
+        TicketLot saved = listingStatusHistoryService.transition(
                 listing,
                 TicketStatus.FAILED,
                 buildReason(MANUAL_VALIDATION_REJECTED_REASON, reason),
                 actor
         );
+        auditLogService.record(actor, "TICKET_VALIDATION_REJECTED", "TICKET_LOT", listingId, details(listing, "mode=MANUAL; reason=" + reason));
+        return saved;
     }
 
     @Transactional
@@ -132,8 +136,9 @@ public class ManualOrganizerWorkflowService {
                 MANUAL_REISSUE_COMPLETED_REASON,
                 actor
         );
-        markActiveOrdersCompleted(listingId);
+        markActiveOrdersCompleted(listing, actor);
         listingHoldRepository.deleteByListingId(listingId);
+        auditLogService.record(actor, "TICKET_REISSUED", "TICKET_LOT", listingId, details(listing, "mode=MANUAL; reissuedTicketUid=" + normalizedNewTicketUid));
         return saved;
     }
 
@@ -153,16 +158,17 @@ public class ManualOrganizerWorkflowService {
                 failureReason,
                 actor
         );
-        markActiveOrdersRefundRequired(listingId, failureReason);
+        markActiveOrdersRefundRequired(listing, failureReason, actor);
         listingHoldRepository.deleteByListingId(listingId);
+        auditLogService.record(actor, "TICKET_REISSUE_REJECTED", "TICKET_LOT", listingId, details(listing, "mode=MANUAL; reason=" + failureReason));
         return saved;
     }
 
 
 
-    private void markActiveOrdersCompleted(Long listingId) {
+    private void markActiveOrdersCompleted(TicketLot listing, User actor) {
         for (PurchaseOrder order : purchaseOrderRepository.findAllByListingIdAndStatusIn(
-                listingId,
+                listing.getId(),
                 List.of(PurchaseOrderStatus.CREATED, PurchaseOrderStatus.PAYMENT_AUTHORIZED, PurchaseOrderStatus.PROCESSING_REISSUE, PurchaseOrderStatus.WAITING_MANUAL_REISSUE)
         )) {
             PaymentCaptureResponse capture = capturePayment(order);
@@ -174,6 +180,7 @@ public class ManualOrganizerWorkflowService {
                 order.setStatus(PurchaseOrderStatus.COMPLETED);
                 order.setPaymentStatus(PaymentStatus.CAPTURED);
                 order.setCompletedAt(java.time.Instant.now());
+                auditLogService.record(actor, "PURCHASE_COMPLETED", "PURCHASE_ORDER", order.getId(), purchaseDetails(order, listing, "manual reissue completed"));
             }
             purchaseOrderRepository.save(order);
         }
@@ -195,14 +202,15 @@ public class ManualOrganizerWorkflowService {
         return reason.trim();
     }
 
-    private void markActiveOrdersRefundRequired(Long listingId, String failureReason) {
+    private void markActiveOrdersRefundRequired(TicketLot listing, String failureReason, User actor) {
         for (PurchaseOrder order : purchaseOrderRepository.findAllByListingIdAndStatusIn(
-                listingId,
+                listing.getId(),
                 List.of(PurchaseOrderStatus.CREATED, PurchaseOrderStatus.PAYMENT_AUTHORIZED, PurchaseOrderStatus.PROCESSING_REISSUE, PurchaseOrderStatus.WAITING_MANUAL_REISSUE)
         )) {
             order.setStatus(PurchaseOrderStatus.REFUND_REQUIRED);
             order.setPaymentStatus(PaymentStatus.REFUND_REQUIRED);
             order.setFailureReason(failureReason);
+            auditLogService.record(actor, "PURCHASE_REFUND_REQUIRED", "PURCHASE_ORDER", order.getId(), purchaseDetails(order, listing, failureReason));
             purchaseOrderRepository.save(order);
         }
         purchaseOrderRepository.flush();
@@ -252,5 +260,27 @@ public class ManualOrganizerWorkflowService {
             return base;
         }
         return base + ": " + comment.trim();
+    }
+
+    private String details(TicketLot listing, String extra) {
+        Long buyerId = listing.getBuyer() == null ? null : listing.getBuyer().getId();
+        Long sellerId = listing.getSeller() == null ? null : listing.getSeller().getId();
+        Long organizerId = listing.getOrganizer() == null ? null : listing.getOrganizer().getId();
+        return "listingId=" + listing.getId()
+                + "; uid=" + listing.getUid()
+                + "; buyerId=" + buyerId
+                + "; sellerId=" + sellerId
+                + "; organizerId=" + organizerId
+                + "; " + extra;
+    }
+
+    private String purchaseDetails(PurchaseOrder order, TicketLot listing, String extra) {
+        Long buyerId = order.getBuyer() == null ? null : order.getBuyer().getId();
+        return "orderId=" + order.getId()
+                + "; listingId=" + listing.getId()
+                + "; buyerId=" + buyerId
+                + "; status=" + order.getStatus()
+                + "; paymentStatus=" + order.getPaymentStatus()
+                + "; " + extra;
     }
 }
