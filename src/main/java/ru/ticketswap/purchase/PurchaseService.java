@@ -27,6 +27,7 @@ import ru.ticketswap.ticket.TicketStatus;
 import ru.ticketswap.ticket.history.ListingStatusHistoryService;
 import ru.ticketswap.user.User;
 
+import ru.ticketswap.common.ForbiddenException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -76,6 +77,7 @@ public class PurchaseService {
     }
 
     public ListingHold createHold(Long listingId, User buyer) {
+        ensureBuyerCanPurchase(buyer);
         return tx.execute(status -> createHoldTx(listingId, buyer));
     }
 
@@ -88,6 +90,7 @@ public class PurchaseService {
     }
 
     public TicketLot buyNow(Long listingId, User buyer, String idempotencyKey) {
+        ensureBuyerCanPurchase(buyer);
         String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
 
         TicketLot alreadyCompleted = tx.execute(status -> loadCompletedPurchaseIfAlreadyBought(listingId, buyer));
@@ -125,6 +128,18 @@ public class PurchaseService {
         }
 
         return tx.execute(status -> completePurchaseTx(listingId, buyer, started.orderId(), reissueResult.reissuedTicketUid()));
+    }
+
+    private void ensureBuyerCanPurchase(User buyer) {
+        if (buyer == null) {
+            throw new ForbiddenException("Пользователь не найден");
+        }
+
+        String role = buyer.getRole();
+
+        if ("ADMIN".equalsIgnoreCase(role) || "ORGANIZER".equalsIgnoreCase(role)) {
+            throw new ForbiddenException("Админы и организаторы не могут покупать билеты. Войдите в аккаунт обычного пользователя");
+        }
     }
 
     private TicketLot loadCompletedPurchaseIfAlreadyBought(Long listingId, User buyer) {
