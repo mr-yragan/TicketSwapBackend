@@ -238,6 +238,13 @@ public class PurchaseService {
         order.setPaymentStatus(PaymentStatus.NOT_STARTED);
         order.setStatus(PurchaseOrderStatus.CREATED);
         PurchaseOrder savedOrder = purchaseOrderRepository.saveAndFlush(order);
+        auditLogService.record(
+                buyer,
+                "PURCHASE_STARTED",
+                "PURCHASE_ORDER",
+                savedOrder.getId(),
+                orderDetails(savedOrder, "listingId=" + listing.getId())
+        );
 
         return new StartProcessingResult(savedOrder.getId(), requiresManualReissue(listing), null);
     }
@@ -297,6 +304,13 @@ public class PurchaseService {
                 MANUAL_REISSUE_WAITING_REASON,
                 null
         );
+        auditLogService.record(
+                buyer,
+                "MANUAL_REISSUE_REQUESTED",
+                "PURCHASE_ORDER",
+                orderId,
+                "listingId=" + listingId + "; buyerId=" + buyer.getId()
+        );
         return listing;
     }
 
@@ -307,6 +321,12 @@ public class PurchaseService {
         order.setPartnerOperationId(operationId);
         order.setStatus(PurchaseOrderStatus.PROCESSING_REISSUE);
         purchaseOrderRepository.saveAndFlush(order);
+        auditLogService.recordSystem(
+                "REISSUE_STARTED",
+                "PURCHASE_ORDER",
+                orderId,
+                orderDetails(order, "operationId=" + operationId)
+        );
         return operationId;
     }
 
@@ -319,6 +339,12 @@ public class PurchaseService {
             order.setStatus(PurchaseOrderStatus.PAYMENT_AUTHORIZED);
         }
         purchaseOrderRepository.saveAndFlush(order);
+        auditLogService.recordSystem(
+                "PAYMENT_AUTHORIZED",
+                "PURCHASE_ORDER",
+                orderId,
+                orderDetails(order, "paymentOperationId=" + paymentOperationId)
+        );
     }
 
     private TicketLot completePurchaseTx(Long listingId, User buyer, Long orderId, String reissuedTicketUid) {
@@ -348,6 +374,19 @@ public class PurchaseService {
 
         updateOrder(orderId, PurchaseOrderStatus.COMPLETED, PaymentStatus.CAPTURED, null, Instant.now(), true);
         listingHoldRepository.deleteByListingId(listingId);
+        auditLogService.recordSystem(
+                "TICKET_REISSUED",
+                "TICKET_LOT",
+                listingId,
+                "orderId=" + orderId + "; buyerId=" + buyer.getId() + "; reissuedTicketUid=" + reissuedTicketUid
+        );
+        auditLogService.record(
+                buyer,
+                "PURCHASE_COMPLETED",
+                "PURCHASE_ORDER",
+                orderId,
+                "listingId=" + listingId + "; sellerId=" + userId(listing.getSeller()) + "; reissuedTicketUid=" + reissuedTicketUid
+        );
 
         return saved;
     }
@@ -464,6 +503,21 @@ public class PurchaseService {
                 && listing.getBuyer() != null
                 && listing.getBuyer().getId() != null
                 && listing.getBuyer().getId().equals(buyer.getId());
+    }
+
+    private String orderDetails(PurchaseOrder order, String extra) {
+        Long listingId = order.getListing() == null ? null : order.getListing().getId();
+        Long buyerId = order.getBuyer() == null ? null : order.getBuyer().getId();
+        return "orderId=" + order.getId()
+                + "; listingId=" + listingId
+                + "; buyerId=" + buyerId
+                + "; status=" + order.getStatus()
+                + "; paymentStatus=" + order.getPaymentStatus()
+                + "; " + extra;
+    }
+
+    private Long userId(User user) {
+        return user == null ? null : user.getId();
     }
 
     private boolean isHoldOwner(ListingHold hold, User buyer) {
