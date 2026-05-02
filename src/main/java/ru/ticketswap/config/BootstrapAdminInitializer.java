@@ -5,6 +5,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import ru.ticketswap.audit.AuditLogService;
 import ru.ticketswap.user.User;
 import ru.ticketswap.user.UserIdentityService;
 import ru.ticketswap.user.UserRepository;
@@ -18,17 +19,20 @@ public class BootstrapAdminInitializer implements ApplicationRunner {
     private final UserRepository userRepository;
     private final UserIdentityService userIdentityService;
     private final PasswordEncoder passwordEncoder;
+    private final AuditLogService auditLogService;
 
     public BootstrapAdminInitializer(
             TicketSwapProperties properties,
             UserRepository userRepository,
             UserIdentityService userIdentityService,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            AuditLogService auditLogService
     ) {
         this.properties = properties;
         this.userRepository = userRepository;
         this.userIdentityService = userIdentityService;
         this.passwordEncoder = passwordEncoder;
+        this.auditLogService = auditLogService;
     }
 
     @Override
@@ -51,6 +55,7 @@ public class BootstrapAdminInitializer implements ApplicationRunner {
         }
 
         userIdentityService.findUserByEmail(normalizedEmail).ifPresentOrElse(existing -> {
+            boolean adminGranted = !ADMIN_ROLE.equalsIgnoreCase(existing.getRole());
             if (!ADMIN_ROLE.equalsIgnoreCase(existing.getRole())) {
                 existing.setRole(ADMIN_ROLE);
                 existing.incrementTokenVersion();
@@ -59,14 +64,18 @@ public class BootstrapAdminInitializer implements ApplicationRunner {
             if (existing.getLogin() == null || existing.getLogin().isBlank()) {
                 existing.setLogin(normalizedLogin);
             }
-            userRepository.save(existing);
+            User saved = userRepository.saveAndFlush(existing);
+            if (adminGranted) {
+                auditLogService.recordSystem("ADMIN_GRANTED", "USER", saved.getId(), "email=" + saved.getEmail() + "; source=bootstrap");
+            }
         }, () -> {
             userIdentityService.assertLoginAvailable(normalizedLogin, null);
             User user = new User(normalizedEmail, passwordEncoder.encode(password));
             user.setLogin(normalizedLogin);
             user.setRole(ADMIN_ROLE);
             user.setEmailVerified(true);
-            userRepository.save(user);
+            User saved = userRepository.saveAndFlush(user);
+            auditLogService.recordSystem("ADMIN_GRANTED", "USER", saved.getId(), "email=" + saved.getEmail() + "; source=bootstrap");
         });
     }
 
