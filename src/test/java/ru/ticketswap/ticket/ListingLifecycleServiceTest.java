@@ -8,6 +8,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
+import ru.ticketswap.audit.AuditLogService;
+import ru.ticketswap.event.Event;
 import ru.ticketswap.partner.PartnerApiClient;
 import ru.ticketswap.partner.PartnerOrganizerCodeMapper;
 import ru.ticketswap.partner.PartnerIntegrationException;
@@ -19,6 +21,7 @@ import ru.ticketswap.user.User;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
@@ -52,6 +55,9 @@ class ListingLifecycleServiceTest {
     @Mock
     private PartnerOrganizerCodeMapper partnerOrganizerCodeMapper;
 
+    @Mock
+    private AuditLogService auditLogService;
+
     private ListingLifecycleService service;
 
     @BeforeEach
@@ -65,6 +71,7 @@ class ListingLifecycleServiceTest {
                 listingStatusHistoryService,
                 partnerApiClient,
                 partnerOrganizerCodeMapper,
+                auditLogService,
                 clock
         );
     }
@@ -75,15 +82,15 @@ class ListingLifecycleServiceTest {
 
         when(ticketRepository.findById(1L)).thenReturn(Optional.of(listing));
         when(partnerOrganizerCodeMapper.resolveOrganizerCode("org1")).thenReturn(Optional.of("org1"));
-        when(partnerApiClient.verifyTicket("org1", "uid-1", null))
-                .thenReturn(new PartnerTicketVerifyResponse(true, "uid-1", "org1", null, null));
+        when(partnerApiClient.verifyTicket("org1", "uid-1", "event-1"))
+                .thenReturn(new PartnerTicketVerifyResponse(true, "uid-1", "org1", "event-1", null));
         stubTransitions();
 
         TicketLot saved = service.validateListing(1L);
 
         verify(listingStatusHistoryService).transition(listing, TicketStatus.PENDING_VALIDATION, "Проверка начата", null);
         verify(listingStatusHistoryService).transition(listing, TicketStatus.PENDING_RECIPIENT, "Проверка партнёра пройдена", null);
-        verify(partnerApiClient).verifyTicket("org1", "uid-1", null);
+        verify(partnerApiClient).verifyTicket("org1", "uid-1", "event-1");
         assertEquals(TicketStatus.PENDING_RECIPIENT, listing.getStatus());
         assertEquals(listing, saved);
     }
@@ -94,7 +101,7 @@ class ListingLifecycleServiceTest {
 
         when(ticketRepository.findById(1L)).thenReturn(Optional.of(listing));
         when(partnerOrganizerCodeMapper.resolveOrganizerCode("org1")).thenReturn(Optional.of("org1"));
-        when(partnerApiClient.verifyTicket("org1", "uid-1", null))
+        when(partnerApiClient.verifyTicket("org1", "uid-1", "event-1"))
                 .thenReturn(new PartnerTicketVerifyResponse(false, "uid-1", "org1", null, "Билет уже использован"));
         stubTransitions();
 
@@ -102,7 +109,7 @@ class ListingLifecycleServiceTest {
 
         verify(listingStatusHistoryService).transition(listing, TicketStatus.PENDING_VALIDATION, "Проверка начата", null);
         verify(listingStatusHistoryService).transition(listing, TicketStatus.FAILED, "Билет уже использован", null);
-        verify(partnerApiClient).verifyTicket("org1", "uid-1", null);
+        verify(partnerApiClient).verifyTicket("org1", "uid-1", "event-1");
         assertEquals(TicketStatus.FAILED, listing.getStatus());
     }
 
@@ -146,7 +153,7 @@ class ListingLifecycleServiceTest {
 
         when(ticketRepository.findById(1L)).thenReturn(Optional.of(listing));
         when(partnerOrganizerCodeMapper.resolveOrganizerCode("org1")).thenReturn(Optional.of("org1"));
-        when(partnerApiClient.verifyTicket("org1", "uid-1", null))
+        when(partnerApiClient.verifyTicket("org1", "uid-1", "event-1"))
                 .thenThrow(new PartnerIntegrationException("ошибка"));
         stubTransitions();
 
@@ -179,7 +186,23 @@ class ListingLifecycleServiceTest {
                 null,
                 seller
         );
-        lot.setOrganizer(new Organizer("Organizer " + organizerName, null, organizerName + "@example.com"));
+        Organizer organizer = new Organizer("Organizer " + organizerName, null, organizerName + "@example.com");
+        lot.setOrganizer(organizer);
+        lot.setEvent(new Event(
+                "event-1",
+                "Concert",
+                null,
+                organizer,
+                Instant.parse("2031-08-21T12:00:00Z"),
+                LocalDate.of(2031, 8, 21)
+        ));
+        lot.addTicketFile(new TicketFile(
+                lot,
+                "tickets/1.pdf",
+                "ticket.pdf",
+                "application/pdf",
+                100L
+        ));
         return lot;
     }
 }
