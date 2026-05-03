@@ -12,9 +12,10 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import ru.ticketswap.auth.JwtService;
 import ru.ticketswap.user.UserIdentityService;
+
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -55,8 +56,11 @@ class JwtAuthenticationFilterTest {
                 .password("hash")
                 .roles("USER")
                 .build();
+        ru.ticketswap.user.User appUser = new ru.ticketswap.user.User("user@example.com", "hash");
 
         when(jwtService.extractEmail("valid-token")).thenReturn("user@example.com");
+        when(jwtService.extractTokenVersion("valid-token")).thenReturn(0);
+        when(userIdentityService.findUserByEmail("user@example.com")).thenReturn(Optional.of(appUser));
         when(userIdentityService.loadUserDetailsByEmail("user@example.com")).thenReturn(userDetails);
 
         jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
@@ -72,8 +76,8 @@ class JwtAuthenticationFilterTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         when(jwtService.extractEmail("valid-token")).thenReturn("user@example.com");
-        when(userIdentityService.loadUserDetailsByEmail("user@example.com"))
-                .thenThrow(new UsernameNotFoundException("Пользователь не найден"));
+        when(jwtService.extractTokenVersion("valid-token")).thenReturn(0);
+        when(userIdentityService.findUserByEmail("user@example.com")).thenReturn(Optional.empty());
 
         jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
 

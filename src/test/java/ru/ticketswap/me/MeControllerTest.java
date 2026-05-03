@@ -1,17 +1,21 @@
 package ru.ticketswap.me;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 import ru.ticketswap.auth.TwoFactorService;
 import ru.ticketswap.hold.ListingHoldRepository;
 import ru.ticketswap.me.dto.MeProfileResponse;
 import ru.ticketswap.me.dto.TwoFactorStatusResponse;
+import ru.ticketswap.me.dto.TwoFactorToggleRequest;
+import ru.ticketswap.purchase.PurchaseOrderRepository;
 import ru.ticketswap.ticket.TicketRepository;
 import ru.ticketswap.user.User;
 import ru.ticketswap.user.UserIdentityService;
@@ -45,10 +49,28 @@ class MeControllerTest {
     private TwoFactorService twoFactorService;
 
     @Mock
+    private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private PurchaseOrderRepository purchaseOrderRepository;
+
+    @Mock
     private UserDetails principal;
 
-    @InjectMocks
     private MeController meController;
+
+    @BeforeEach
+    void setUp() {
+        meController = new MeController(
+                userRepository,
+                ticketRepository,
+                listingHoldRepository,
+                userIdentityService,
+                twoFactorService,
+                passwordEncoder,
+                purchaseOrderRepository
+        );
+    }
 
     @Test
     void profileIncludesTwoFactorStatus() {
@@ -65,13 +87,17 @@ class MeControllerTest {
     @Test
     void enableTwoFactorUpdatesUser() {
         User user = authenticatedUser();
+        TwoFactorToggleRequest request = new TwoFactorToggleRequest("password123");
 
-        ResponseEntity<TwoFactorStatusResponse> response = meController.enableTwoFactor(principal);
+        when(passwordEncoder.matches("password123", user.getPasswordHash())).thenReturn(true);
+
+        ResponseEntity<TwoFactorStatusResponse> response = meController.enableTwoFactor(principal, request);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
         assertTrue(response.getBody().twoFactorEnabled());
         assertTrue(user.isTwoFactorEnabled());
+
         verify(userRepository).save(user);
         verify(twoFactorService).invalidateChallengesForUser(user.getId());
     }
@@ -80,22 +106,28 @@ class MeControllerTest {
     void disableTwoFactorUpdatesUserAndInvalidatesChallenges() {
         User user = authenticatedUser();
         user.setTwoFactorEnabled(true);
+        TwoFactorToggleRequest request = new TwoFactorToggleRequest("password123");
 
-        ResponseEntity<TwoFactorStatusResponse> response = meController.disableTwoFactor(principal);
+        when(passwordEncoder.matches("password123", user.getPasswordHash())).thenReturn(true);
+
+        ResponseEntity<TwoFactorStatusResponse> response = meController.disableTwoFactor(principal, request);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
         assertFalse(response.getBody().twoFactorEnabled());
+        assertFalse(user.isTwoFactorEnabled());
+
         verify(userRepository).save(user);
         verify(twoFactorService).invalidateChallengesForUser(user.getId());
     }
 
     private User authenticatedUser() {
         User user = new User("user@example.com", "hash");
+        ReflectionTestUtils.setField(user, "id", 1L);
         user.setEmailVerified(true);
 
         when(principal.getUsername()).thenReturn("user@example.com");
-        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.of(user));
 
         return user;
     }

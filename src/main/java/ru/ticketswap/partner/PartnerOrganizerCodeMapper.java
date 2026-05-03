@@ -3,6 +3,7 @@ package ru.ticketswap.partner;
 import org.springframework.stereotype.Component;
 import ru.ticketswap.organizer.OrganizerRepository;
 
+import java.util.Locale;
 import java.util.Optional;
 
 @Component
@@ -29,6 +30,6 @@ public class PartnerOrganizerCodeMapper {
         if (organizerName == null) {
             return null;
         }
-        return organizerName.trim();
+        return organizerName.trim().toLowerCase(Locale.ROOT);
     }
 }

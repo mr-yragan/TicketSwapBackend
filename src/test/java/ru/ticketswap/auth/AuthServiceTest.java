@@ -60,16 +60,7 @@ class AuthServiceTest {
 
     @Test
     void registerStoresEncodedPassword() {
-        AuthService authService = new AuthService(
-                userRepository,
-                userIdentityService,
-                passwordEncoder,
-                authenticationManager,
-                jwtService,
-                twoFactorService,
-                mailService,
-                emailVerificationService
-        );
+        AuthService authService = createAuthService();
 
         AuthRequest request = new AuthRequest("User@Example.com", "test_login", "password123");
 
@@ -87,16 +78,7 @@ class AuthServiceTest {
 
     @Test
     void loginReturnsJwtWhenTwoFactorDisabled() {
-        AuthService authService = new AuthService(
-                userRepository,
-                userIdentityService,
-                passwordEncoder,
-                authenticationManager,
-                jwtService,
-                twoFactorService,
-                mailService,
-                emailVerificationService
-        );
+        AuthService authService = createAuthService();
 
         LoginRequest request = new LoginRequest("user@example.com", "password123");
         User user = new User("user@example.com", "hash");
@@ -105,33 +87,25 @@ class AuthServiceTest {
         when(authenticationManager.authenticate(any())).thenReturn(authentication);
         when(authentication.getName()).thenReturn("user@example.com");
         when(userIdentityService.findUserByEmail("user@example.com")).thenReturn(Optional.of(user));
-        when(jwtService.generate("user@example.com")).thenReturn("jwt-token");
+        when(jwtService.generate(user)).thenReturn("jwt-token");
 
         LoginResponse response = authService.login(request);
 
         assertFalse(response.requiresTwoFactor());
         assertEquals("jwt-token", response.token());
         assertNull(response.twoFactorChallengeId());
-        verify(jwtService).generate("user@example.com");
+        verify(jwtService).generate(user);
     }
 
     @Test
     void loginReturnsChallengeWhenTwoFactorEnabled() {
-        AuthService authService = new AuthService(
-                userRepository,
-                userIdentityService,
-                passwordEncoder,
-                authenticationManager,
-                jwtService,
-                twoFactorService,
-                mailService,
-                emailVerificationService
-        );
+        AuthService authService = createAuthService();
 
         LoginRequest request = new LoginRequest("user@example.com", "password123");
         User user = new User("user@example.com", "hash");
         user.setEmailVerified(true);
         user.setTwoFactorEnabled(true);
+
         Instant expiresAt = Instant.parse("2026-03-30T12:00:00Z");
 
         when(authenticationManager.authenticate(any())).thenReturn(authentication);
@@ -139,11 +113,11 @@ class AuthServiceTest {
         when(userIdentityService.findUserByEmail("user@example.com")).thenReturn(Optional.of(user));
         when(twoFactorService.createChallenge(user))
                 .thenReturn(new TwoFactorService.PendingTwoFactorChallenge(
-                "challenge-123",
-                "user@example.com",
-                "654321",
-                expiresAt
-        ));
+                        "challenge-123",
+                        "user@example.com",
+                        "654321",
+                        expiresAt
+                ));
 
         LoginResponse response = authService.login(request);
 
@@ -156,41 +130,27 @@ class AuthServiceTest {
 
     @Test
     void verifyTwoFactorReturnsJwt() {
-        AuthService authService = new AuthService(
-                userRepository,
-                userIdentityService,
-                passwordEncoder,
-                authenticationManager,
-                jwtService,
-                twoFactorService,
-                mailService,
-                emailVerificationService
-        );
+        AuthService authService = createAuthService();
 
         User user = new User("user@example.com", "hash");
 
         when(twoFactorService.verifyCode("challenge-123", "123456")).thenReturn(user);
-        when(jwtService.generate("user@example.com")).thenReturn("jwt-token");
+        when(jwtService.generate(user)).thenReturn("jwt-token");
 
-        AuthResponse response = authService.verifyTwoFactor(new TwoFactorVerifyRequest("challenge-123", "123456"));
+        AuthResponse response = authService.verifyTwoFactor(
+                new TwoFactorVerifyRequest("challenge-123", "123456")
+        );
 
         assertEquals("jwt-token", response.token());
+        verify(jwtService).generate(user);
     }
 
     @Test
     void resendTwoFactorReturnsNewChallenge() {
-        AuthService authService = new AuthService(
-                userRepository,
-                userIdentityService,
-                passwordEncoder,
-                authenticationManager,
-                jwtService,
-                twoFactorService,
-                mailService,
-                emailVerificationService
-        );
+        AuthService authService = createAuthService();
 
         Instant expiresAt = Instant.parse("2026-04-23T12:00:00Z");
+
         when(twoFactorService.resendChallenge("challenge-123"))
                 .thenReturn(new TwoFactorService.PendingTwoFactorChallenge(
                         "challenge-456",
@@ -199,12 +159,27 @@ class AuthServiceTest {
                         expiresAt
                 ));
 
-        LoginResponse response = authService.resendTwoFactor(new TwoFactorResendRequest("challenge-123"));
+        LoginResponse response = authService.resendTwoFactor(
+                new TwoFactorResendRequest("challenge-123")
+        );
 
         assertTrue(response.requiresTwoFactor());
         assertEquals("challenge-456", response.twoFactorChallengeId());
         assertEquals(expiresAt, response.twoFactorExpiresAt());
         assertNull(response.token());
         verify(mailService).sendTwoFactorCode("user@example.com", "654321", expiresAt);
+    }
+
+    private AuthService createAuthService() {
+        return new AuthService(
+                userRepository,
+                userIdentityService,
+                passwordEncoder,
+                authenticationManager,
+                jwtService,
+                twoFactorService,
+                mailService,
+                emailVerificationService
+        );
     }
 }
