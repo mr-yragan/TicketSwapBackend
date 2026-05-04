@@ -35,6 +35,7 @@ import ru.ticketswap.ticket.dto.ListingDetailsResponse;
 import ru.ticketswap.ticket.dto.ListingStatusHistoryResponse;
 import ru.ticketswap.ticket.dto.ListingViewResponse;
 import ru.ticketswap.ticket.dto.TicketFileDownloadUrlResponse;
+import ru.ticketswap.ticket.dto.TicketFilePreviewsResponse;
 import ru.ticketswap.ticket.dto.TicketLotPageResponse;
 import ru.ticketswap.ticket.dto.TicketFilesResponse;
 import ru.ticketswap.ticket.dto.TicketLotResponse;
@@ -376,6 +377,17 @@ public class TicketController {
         return ResponseEntity.ok(ticketFileStorageService.listFiles(ticket));
     }
 
+    @GetMapping("/{id}/files/previews")
+    public ResponseEntity<TicketFilePreviewsResponse> listTicketFilePreviews(
+            @PathVariable("id") Long id
+    ) {
+        TicketLot ticket = loadTicket(id);
+        if (!isVisibleForPublic(ticket)) {
+            throw new NotFoundException("Билет не найден");
+        }
+        return ResponseEntity.ok(ticketFileStorageService.listFilePreviews(ticket));
+    }
+
     @GetMapping("/{id}/file/download-url")
     public ResponseEntity<TicketFileDownloadUrlResponse> getSingleTicketFileDownloadUrl(
             @PathVariable("id") Long id,
@@ -700,13 +712,16 @@ public class TicketController {
     }
 
     private void ensureCanReadTicketFiles(TicketLot ticket, User currentUser) {
-        boolean isSeller = isSeller(ticket, currentUser);
+        boolean isSellerBeforePurchase = isSeller(ticket, currentUser)
+                && ticket.getBuyer() == null
+                && ticket.getStatus() != TicketStatus.PROCESSING
+                && ticket.getStatus() != TicketStatus.COMPLETED;
         boolean isCompletedBuyer = currentUser != null
                 && ticket.getStatus() == TicketStatus.COMPLETED
                 && isBuyer(ticket, currentUser);
         boolean isOrganizer = isOrganizerForTicket(ticket, currentUser);
 
-        if (!isSeller && !isCompletedBuyer && !isOrganizer) {
+        if (!isSellerBeforePurchase && !isCompletedBuyer && !isOrganizer) {
             throw new UnauthorizedException("У вас нет доступа к этим файлам билета");
         }
     }

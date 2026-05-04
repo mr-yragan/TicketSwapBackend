@@ -56,6 +56,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/organizer/**").hasRole("ORGANIZER")
                         .requestMatchers(HttpMethod.GET, "/api/tickets/*/status-history").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/tickets/my").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/tickets/*/files/previews").permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/tickets/*/file",

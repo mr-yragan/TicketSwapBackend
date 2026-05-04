@@ -1,0 +1,24 @@
+databaseChangeLog:
+  - changeSet:
+      id: 27-add-ticket-file-previews
+      author: nikolay
+      changes:
+        - addColumn:
+            tableName: ticket_files
+            columns:
+              - column:
+                  name: preview_object_key
+                  type: varchar(512)
+              - column:
+                  name: preview_content_type
+                  type: varchar(100)
+              - column:
+                  name: preview_size_bytes
+                  type: bigint
+              - column:
+                  name: preview_created_at
+                  type: timestamp with time zone
+        - addUniqueConstraint:
+            tableName: ticket_files
+            columnNames: preview_object_key
+            constraintName: uq_ticket_files_preview_object_key

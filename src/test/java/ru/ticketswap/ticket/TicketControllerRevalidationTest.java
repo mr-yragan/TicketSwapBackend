@@ -2,6 +2,7 @@ package ru.ticketswap.ticket;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
+import ru.ticketswap.common.UnauthorizedException;
 import ru.ticketswap.event.EventRepository;
 import ru.ticketswap.hold.ListingHoldRepository;
 import ru.ticketswap.organizer.OrganizerRepository;
@@ -16,7 +17,9 @@ import ru.ticketswap.user.UserRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
@@ -145,6 +148,56 @@ class TicketControllerRevalidationTest {
         assertTrue(requiresRevalidation);
     }
 
+    @Test
+    void sellerCanReadOriginalFilesBeforePurchaseStarts() {
+        TicketController controller = createController();
+        User seller = userWithId("seller@example.com", 1L);
+        TicketLot listing = listingWithSeller(seller);
+        listing.setStatus(TicketStatus.PENDING_RECIPIENT);
+
+        assertDoesNotThrow(() -> ReflectionTestUtils.invokeMethod(
+                controller,
+                "ensureCanReadTicketFiles",
+                listing,
+                seller
+        ));
+    }
+
+    @Test
+    void sellerCannotReadOriginalFilesAfterReissueCompletes() {
+        TicketController controller = createController();
+        User seller = userWithId("seller@example.com", 1L);
+        User buyer = userWithId("buyer@example.com", 2L);
+        TicketLot listing = listingWithSeller(seller);
+        listing.setBuyer(buyer);
+        listing.setStatus(TicketStatus.COMPLETED);
+        listing.setReissuedTicketUid("new-ticket-uid");
+
+        assertThrows(UnauthorizedException.class, () -> ReflectionTestUtils.invokeMethod(
+                controller,
+                "ensureCanReadTicketFiles",
+                listing,
+                seller
+        ));
+    }
+
+    @Test
+    void completedBuyerCanReadOriginalFiles() {
+        TicketController controller = createController();
+        User seller = userWithId("seller@example.com", 1L);
+        User buyer = userWithId("buyer@example.com", 2L);
+        TicketLot listing = listingWithSeller(seller);
+        listing.setBuyer(buyer);
+        listing.setStatus(TicketStatus.COMPLETED);
+
+        assertDoesNotThrow(() -> ReflectionTestUtils.invokeMethod(
+                controller,
+                "ensureCanReadTicketFiles",
+                listing,
+                buyer
+        ));
+    }
+
     private TicketController createController() {
         return new TicketController(
                 mock(TicketRepository.class),
@@ -158,5 +211,26 @@ class TicketControllerRevalidationTest {
                 mock(TicketFileStorageService.class),
                 mock(ListingStatusHistoryService.class)
         );
+    }
+
+    private TicketLot listingWithSeller(User seller) {
+        return new TicketLot(
+                "uid-1",
+                "Концерт",
+                LocalDateTime.now().plusDays(10),
+                "Арена",
+                "Берлин",
+                BigDecimal.valueOf(150),
+                null,
+                "org1",
+                null,
+                seller
+        );
+    }
+
+    private User userWithId(String email, Long id) {
+        User user = new User(email, "hash");
+        ReflectionTestUtils.setField(user, "id", id);
+        return user;
     }
 }
