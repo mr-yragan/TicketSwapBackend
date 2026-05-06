@@ -48,7 +48,7 @@ ticketswap:
     password-reset:
       token-expiration-ms: ${TICKETSWAP_PASSWORD_RESET_TOKEN_EXPIRATION_MS:900000}
     email-verification:
-      token-expiration-ms: ${TICKETSWAP_EMAIL_VERIFICATION_TOKEN_EXPIRATION_MS:86400000}
+      token-expiration-ms: ${TICKETSWAP_EMAIL_VERIFICATION_TOKEN_EXPIRATION_MS:7200000}
   cors:
     allowed-origins: ${TICKETSWAP_CORS_ALLOWED_ORIGINS:http://localhost:3000}
   storage:
