@@ -23,7 +23,7 @@ public class PaymentMockController {
         if (!authorized) {
             return ResponseEntity.ok(new AuthorizeResponse(false, null, "Mock payment declined"));
         }
-        return ResponseEntity.ok(new AuthorizeResponse(true, "PAY-" + Math.abs(basis.hashCode()) + "-" + System.currentTimeMillis(), null));
+        return ResponseEntity.ok(new AuthorizeResponse(true, "PAY-" + Math.floorMod(basis.hashCode(), Integer.MAX_VALUE) + "-" + System.currentTimeMillis(), null));
     }
 
     @PostMapping("/capture")
