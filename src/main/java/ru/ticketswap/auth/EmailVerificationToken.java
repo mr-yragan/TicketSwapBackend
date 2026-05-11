@@ -71,7 +71,7 @@ public class EmailVerificationToken {
     }
 
     public boolean isExpired(Instant now) {
-        return expiresAt.isBefore(now);
+        return !expiresAt.isAfter(now);
     }
 
     public void markConsumed(Instant now) {
