@@ -36,8 +36,10 @@ import java.awt.image.BufferedImageOp;
 import java.awt.image.ConvolveOp;
 import java.awt.image.Kernel;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -166,6 +168,29 @@ public class TicketFileStorageService {
             deleteObjectQuietly(objectKey);
             throw ex;
         }
+    }
+
+    public TicketFileDownloadUrlResponse uploadGeneratedReissuedTicketFile(
+            TicketLot ticket,
+            String originalName,
+            byte[] content,
+            String contentType
+    ) {
+        if (content == null || content.length == 0) {
+            throw new BusinessRuleException("Сгенерированный файл нового билета пустой");
+        }
+
+        String safeName = originalName == null || originalName.isBlank()
+                ? "reissued-ticket.pdf"
+                : originalName;
+        String safeContentType = contentType == null || contentType.isBlank()
+                ? "application/pdf"
+                : contentType;
+
+        return uploadReissuedTicketFile(
+                ticket,
+                new GeneratedMultipartFile(safeName, content, safeContentType)
+        );
     }
 
     public TicketFileDownloadUrlResponse createReissuedTicketDownloadUrl(TicketLot ticket) {
@@ -666,5 +691,58 @@ public class TicketFileStorageService {
     }
 
     private record ValidatedFile(String originalName, String contentType) {
+    }
+
+    private static final class GeneratedMultipartFile implements MultipartFile {
+
+        private final String originalName;
+        private final byte[] content;
+        private final String contentType;
+
+        private GeneratedMultipartFile(String originalName, byte[] content, String contentType) {
+            this.originalName = originalName;
+            this.content = content.clone();
+            this.contentType = contentType;
+        }
+
+        @Override
+        public String getName() {
+            return "ticketFile";
+        }
+
+        @Override
+        public String getOriginalFilename() {
+            return originalName;
+        }
+
+        @Override
+        public String getContentType() {
+            return contentType;
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return content.length == 0;
+        }
+
+        @Override
+        public long getSize() {
+            return content.length;
+        }
+
+        @Override
+        public byte[] getBytes() {
+            return content.clone();
+        }
+
+        @Override
+        public InputStream getInputStream() {
+            return new java.io.ByteArrayInputStream(content);
+        }
+
+        @Override
+        public void transferTo(File dest) throws IOException {
+            Files.write(dest.toPath(), content);
+        }
     }
 }

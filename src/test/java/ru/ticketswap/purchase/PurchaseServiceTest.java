@@ -22,6 +22,8 @@ import ru.ticketswap.partner.PartnerTicketReissueResponse;
 import ru.ticketswap.payment.PaymentAuthorizeResponse;
 import ru.ticketswap.payment.PaymentCaptureResponse;
 import ru.ticketswap.payment.PaymentGatewayClient;
+import ru.ticketswap.storage.TicketFileStorageException;
+import ru.ticketswap.storage.TicketFileStorageService;
 import ru.ticketswap.ticket.TicketFile;
 import ru.ticketswap.ticket.TicketLot;
 import ru.ticketswap.ticket.TicketRepository;
@@ -82,6 +84,9 @@ class PurchaseServiceTest {
     @Mock
     private NotificationOutboxService notificationOutboxService;
 
+    @Mock
+    private TicketFileStorageService ticketFileStorageService;
+
     private PurchaseService service;
     private User seller;
     private User buyer;
@@ -103,7 +108,8 @@ class PurchaseServiceTest {
                 partnerOrganizerCodeMapper,
                 paymentGatewayClient,
                 auditLogService,
-                notificationOutboxService
+                notificationOutboxService,
+                ticketFileStorageService
         );
 
         seller = createUser(1L, "seller@example.com");
@@ -174,6 +180,13 @@ class PurchaseServiceTest {
                 "REISSUE-1-1"
         );
 
+        verify(ticketFileStorageService).uploadGeneratedReissuedTicketFile(
+                eq(listing),
+                any(String.class),
+                any(byte[].class),
+                eq("application/pdf")
+        );
+
         verify(listingStatusHistoryService).recordStatus(
                 listing,
                 TicketStatus.PROCESSING,
@@ -187,6 +200,46 @@ class PurchaseServiceTest {
                 TicketStatus.COMPLETED,
                 "Покупка завершена, платёж захвачен",
                 buyer
+        );
+
+        verify(listingHoldRepository).deleteByListingId(1L);
+    }
+
+    @Test
+    void buyNowFailsListingWhenGeneratedReissuedTicketFileIsNotStored() {
+        when(listingHoldRepository.findByListingIdAndHoldUntilAfter(eq(1L), any(Instant.class)))
+                .thenReturn(Optional.of(hold));
+
+        when(paymentGatewayClient.capture("PAY-1"))
+                .thenReturn(new PaymentCaptureResponse(true, "PAY-1", null));
+
+        when(partnerApiClient.reissueTicket("org1", "TICKET-12345", "buyer@example.com", "event-1", "REISSUE-1-1"))
+                .thenReturn(new PartnerTicketReissueResponse(
+                        true,
+                        "TICKET-12345",
+                        "REISSUED-org1-TICKET-12345",
+                        "org1",
+                        "event-1",
+                        "REISSUE-1-1",
+                        null
+                ));
+
+        when(ticketFileStorageService.uploadGeneratedReissuedTicketFile(
+                eq(listing),
+                any(String.class),
+                any(byte[].class),
+                eq("application/pdf")
+        )).thenThrow(new TicketFileStorageException("S3 is unavailable"));
+
+        TicketLot saved = service.buyNow(1L, buyer);
+
+        assertEquals(TicketStatus.FAILED, saved.getStatus());
+
+        verify(listingStatusHistoryService).transition(
+                listing,
+                TicketStatus.FAILED,
+                "Новый файл билета не сохранён в S3; требуется возврат условно авторизованного платежа",
+                null
         );
 
         verify(listingHoldRepository).deleteByListingId(1L);

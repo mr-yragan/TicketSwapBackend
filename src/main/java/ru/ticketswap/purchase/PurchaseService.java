@@ -1,5 +1,10 @@
 package ru.ticketswap.purchase;
 
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -17,6 +22,8 @@ import ru.ticketswap.payment.PaymentGatewayClient;
 import ru.ticketswap.payment.PaymentIntegrationException;
 import ru.ticketswap.organizer.Organizer;
 import ru.ticketswap.organizer.OrganizerVerificationMode;
+import ru.ticketswap.storage.TicketFileStorageException;
+import ru.ticketswap.storage.TicketFileStorageService;
 import ru.ticketswap.partner.PartnerApiClient;
 import ru.ticketswap.partner.PartnerIntegrationException;
 import ru.ticketswap.partner.PartnerOrganizerCodeMapper;
@@ -28,6 +35,8 @@ import ru.ticketswap.ticket.history.ListingStatusHistoryService;
 import ru.ticketswap.user.User;
 
 import ru.ticketswap.common.ForbiddenException;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -51,6 +60,7 @@ public class PurchaseService {
     private final PaymentGatewayClient paymentGatewayClient;
     private final AuditLogService auditLogService;
     private final NotificationOutboxService notificationOutboxService;
+    private final TicketFileStorageService ticketFileStorageService;
 
     public PurchaseService(
             TicketRepository ticketRepository,
@@ -62,7 +72,8 @@ public class PurchaseService {
             PartnerOrganizerCodeMapper partnerOrganizerCodeMapper,
             PaymentGatewayClient paymentGatewayClient,
             AuditLogService auditLogService,
-            NotificationOutboxService notificationOutboxService
+            NotificationOutboxService notificationOutboxService,
+            TicketFileStorageService ticketFileStorageService
     ) {
         this.ticketRepository = ticketRepository;
         this.listingHoldRepository = listingHoldRepository;
@@ -74,6 +85,7 @@ public class PurchaseService {
         this.paymentGatewayClient = paymentGatewayClient;
         this.auditLogService = auditLogService;
         this.notificationOutboxService = notificationOutboxService;
+        this.ticketFileStorageService = ticketFileStorageService;
     }
 
     public ListingHold createHold(Long listingId, User buyer) {
@@ -127,7 +139,16 @@ public class PurchaseService {
             return tx.execute(status -> failPurchaseTx(listingId, buyer, started.orderId(), "Платёж не захвачен: " + failureReason(capture.reason())));
         }
 
-        return tx.execute(status -> completePurchaseTx(listingId, buyer, started.orderId(), reissueResult.reissuedTicketUid()));
+        try {
+            return tx.execute(status -> completePurchaseTx(listingId, buyer, started.orderId(), reissueResult.reissuedTicketUid()));
+        } catch (TicketFileStorageException ex) {
+            return tx.execute(status -> failPurchaseTx(
+                    listingId,
+                    buyer,
+                    started.orderId(),
+                    "Новый файл билета не сохранён в S3"
+            ));
+        }
     }
 
     private void ensureBuyerCanPurchase(User buyer) {
@@ -369,6 +390,7 @@ public class PurchaseService {
         }
 
         listing.setReissuedTicketUid(reissuedTicketUid);
+        uploadGeneratedReissuedTicketFile(listing, buyer, orderId, reissuedTicketUid);
         listingStatusHistoryService.recordStatus(listing, listing.getStatus(), listing.getStatus(), "Билет перевыпущен партнёром", null);
         TicketLot saved = listingStatusHistoryService.transition(listing, TicketStatus.COMPLETED, "Покупка завершена, платёж захвачен", buyer);
 
@@ -587,6 +609,81 @@ public class PurchaseService {
             throw new BusinessRuleException("Idempotency-Key должен быть от 8 до 128 символов и содержать только буквы, цифры, точку, подчёркивание, дефис или двоеточие");
         }
         return normalized;
+    }
+
+    private void uploadGeneratedReissuedTicketFile(
+            TicketLot listing,
+            User buyer,
+            Long orderId,
+            String reissuedTicketUid
+    ) {
+        byte[] file = buildGeneratedReissuedTicketPdf(listing, buyer, orderId, reissuedTicketUid);
+
+        ticketFileStorageService.uploadGeneratedReissuedTicketFile(
+                listing,
+                "reissued-ticket-" + safeFileToken(reissuedTicketUid) + ".pdf",
+                file,
+                "application/pdf"
+        );
+    }
+
+    private byte[] buildGeneratedReissuedTicketPdf(
+            TicketLot listing,
+            User buyer,
+            Long orderId,
+            String reissuedTicketUid
+    ) {
+        try (PDDocument document = new PDDocument();
+             ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+
+            PDPage page = new PDPage(PDRectangle.A6);
+            document.addPage(page);
+
+            try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+                content.beginText();
+                content.setFont(PDType1Font.HELVETICA_BOLD, 14);
+                content.newLineAtOffset(32, 360);
+                content.showText("TicketSwap reissued ticket");
+
+                content.newLineAtOffset(0, -24);
+                content.setFont(PDType1Font.HELVETICA, 9);
+
+                writePdfLine(content, "Listing ID: " + listing.getId());
+                writePdfLine(content, "Order ID: " + orderId);
+                writePdfLine(content, "Old ticket UID: " + listing.getUid());
+                writePdfLine(content, "New ticket UID: " + reissuedTicketUid);
+                writePdfLine(content, "Buyer email: " + (buyer == null ? "-" : buyer.getEmail()));
+                writePdfLine(content, "Event: " + listing.getEventName());
+                writePdfLine(content, "Event date: " + listing.getEventDate());
+                writePdfLine(content, "Status: REISSUED");
+
+                content.endText();
+            }
+
+            document.save(outputStream);
+            return outputStream.toByteArray();
+        } catch (IOException ex) {
+            throw new TicketFileStorageException("Не удалось сгенерировать файл перевыпущенного билета", ex);
+        }
+    }
+
+    private void writePdfLine(PDPageContentStream content, String text) throws IOException {
+        content.showText(safePdfText(text));
+        content.newLineAtOffset(0, -14);
+    }
+
+    private String safePdfText(String value) {
+        if (value == null || value.isBlank()) {
+            return "-";
+        }
+        return value.replaceAll("[^\\x20-\\x7E]", "?");
+    }
+
+    private String safeFileToken(String value) {
+        if (value == null || value.isBlank()) {
+            return "ticket";
+        }
+        return value.replaceAll("[^A-Za-z0-9_.-]", "_");
     }
 
     private record StartProcessingResult(Long orderId, boolean manual, TicketLot completedListing) {
