@@ -11,10 +11,12 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 import ru.ticketswap.auth.TwoFactorService;
+import ru.ticketswap.common.UnauthorizedException;
 import ru.ticketswap.hold.ListingHoldRepository;
 import ru.ticketswap.me.dto.MeProfileResponse;
 import ru.ticketswap.me.dto.TwoFactorStatusResponse;
 import ru.ticketswap.me.dto.TwoFactorToggleRequest;
+import ru.ticketswap.me.dto.UpdateMeRequest;
 import ru.ticketswap.purchase.PurchaseOrderRepository;
 import ru.ticketswap.ticket.TicketRepository;
 import ru.ticketswap.user.User;
@@ -26,7 +28,9 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -119,6 +123,63 @@ class MeControllerTest {
 
         verify(userRepository).save(user);
         verify(twoFactorService).invalidateChallengesForUser(user.getId());
+    }
+
+    @Test
+    void updateProfileChangesLoginWithPasswordAndInvalidatesTokens() {
+        User user = authenticatedUser();
+        user.setLogin("old-login");
+        UpdateMeRequest request = new UpdateMeRequest("new-login", "password123");
+
+        when(userIdentityService.normalizeLogin("new-login")).thenReturn("new-login");
+        when(passwordEncoder.matches("password123", user.getPasswordHash())).thenReturn(true);
+
+        ResponseEntity<MeProfileResponse> response = meController.updateProfile(principal, request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("new-login", response.getBody().login());
+        assertEquals(1, user.getTokenVersion());
+
+        verify(userIdentityService).assertLoginAvailable("new-login", user.getId());
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void updateProfileRejectsLoginChangeWithoutValidPassword() {
+        User user = authenticatedUser();
+        user.setLogin("old-login");
+        UpdateMeRequest request = new UpdateMeRequest("new-login", "wrong-password");
+
+        when(userIdentityService.normalizeLogin("new-login")).thenReturn("new-login");
+        when(passwordEncoder.matches("wrong-password", user.getPasswordHash())).thenReturn(false);
+
+        assertThrows(UnauthorizedException.class, () -> meController.updateProfile(principal, request));
+
+        assertEquals("old-login", user.getLogin());
+        assertEquals(0, user.getTokenVersion());
+        verify(userIdentityService, never()).assertLoginAvailable("new-login", user.getId());
+        verify(userRepository, never()).save(user);
+    }
+
+    @Test
+    void updateProfileKeepsSameLoginWithoutPassword() {
+        User user = authenticatedUser();
+        user.setLogin("same-login");
+        UpdateMeRequest request = new UpdateMeRequest("same-login", null);
+
+        when(userIdentityService.normalizeLogin("same-login")).thenReturn("same-login");
+
+        ResponseEntity<MeProfileResponse> response = meController.updateProfile(principal, request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("same-login", response.getBody().login());
+        assertEquals(0, user.getTokenVersion());
+
+        verify(passwordEncoder, never()).matches(null, user.getPasswordHash());
+        verify(userIdentityService, never()).assertLoginAvailable("same-login", user.getId());
+        verify(userRepository).save(user);
     }
 
     private User authenticatedUser() {

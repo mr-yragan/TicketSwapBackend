@@ -75,8 +75,12 @@ public class MeController {
 
         if (request.login() != null && !request.login().isBlank()) {
             String normalizedLogin = userIdentityService.normalizeLogin(request.login());
-            userIdentityService.assertLoginAvailable(normalizedLogin, user.getId());
-            user.setLogin(normalizedLogin);
+            if (!normalizedLogin.equals(user.getLogin())) {
+                ensurePasswordMatches(user, request.password());
+                userIdentityService.assertLoginAvailable(normalizedLogin, user.getId());
+                user.setLogin(normalizedLogin);
+                user.incrementTokenVersion();
+            }
         }
 
         userRepository.save(user);

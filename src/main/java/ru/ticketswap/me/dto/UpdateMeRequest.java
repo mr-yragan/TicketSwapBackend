@@ -9,6 +9,9 @@ public record UpdateMeRequest(
                 regexp = "^(?!.*@)[A-Za-z0-9_.-]+$",
                 message = "Логин может содержать только буквы, цифры, нижнее подчёркивание, точку и дефис и не должен выглядеть как почта"
         )
-        String login
+        String login,
+
+        @Size(min = 8, max = 72, message = "Пароль должен быть от 8 до 72 символов")
+        String password
 ) {
 }
